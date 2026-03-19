@@ -1,15 +1,229 @@
 {% extends "base.html" %}
-{% block title %}tsa - {{ app_name }}{% endblock %}
-{% block page_title %}tsa{% endblock %}
+{% block title %}TSA Management - {{ app_name }}{% endblock %}
+{% block page_title %}TSA Management{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-4">
+<div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h2><i class="bi bi-kanban me-2"></i>tsa</h2>
-        <p class="text-muted">This module is under construction.</p>
+        <h2><i class="bi bi-arrow-left-right me-2"></i>TSA Management</h2>
+        <p class="text-muted mb-0">Track and manage Transitional Service Agreements</p>
+    </div>
+    <div class="d-flex gap-2">
+        <select id="programSelect" class="form-select form-select-sm" style="min-width:240px;" onchange="loadData()">
+            <option value="">Select program...</option>
+            {% for p in programs %}
+            <option value="{{ p.id }}">{{ p.name }}</option>
+            {% endfor %}
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="showAddTSA()"><i class="bi bi-plus-lg me-1"></i>Add TSA</button>
     </div>
 </div>
-<div class="cfi-demo-banner">
-    <i class="bi bi-info-circle"></i>
-    This page will be built in the next phase. <a href="/dashboard">Return to Dashboard</a>.
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4" id="summaryCards">
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="totalTSAs">--</div>
+            <div class="metric-label">Total TSAs</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="activeTSAs" style="color:#198754;">--</div>
+            <div class="metric-label">Active</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="monthlyCost" style="color:#0d6efd;">--</div>
+            <div class="metric-label">Monthly Cost</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="avgReadiness" style="color:#6f42c1;">--</div>
+            <div class="metric-label">Avg Readiness Score</div>
+        </div>
+    </div>
 </div>
+
+<!-- TSA Table -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Service Name</th>
+                        <th>Category</th>
+                        <th>Provider</th>
+                        <th>Receiver</th>
+                        <th>Monthly Cost</th>
+                        <th>Exit Date</th>
+                        <th>Status</th>
+                        <th>Exit Readiness</th>
+                    </tr>
+                </thead>
+                <tbody id="tsaTableBody">
+                    <tr><td colspan="8" class="text-center text-muted py-4">Select a program to view TSAs</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Add TSA Modal -->
+<div class="modal fade" id="addTSAModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Add TSA</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label">Service Name *</label><input type="text" class="form-control" id="tsaName"></div>
+                <div class="row g-3">
+                    <div class="col-md-6"><label class="form-label">Category</label>
+                        <select class="form-select" id="tsaCategory">
+                            <option value="IT">IT</option>
+                            <option value="Finance">Finance</option>
+                            <option value="HR">HR</option>
+                            <option value="Legal">Legal</option>
+                            <option value="Operations">Operations</option>
+                            <option value="Procurement">Procurement</option>
+                            <option value="Facilities">Facilities</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6"><label class="form-label">Status</label>
+                        <select class="form-select" id="tsaStatus">
+                            <option value="active">Active</option>
+                            <option value="exiting">Exiting</option>
+                            <option value="extended">Extended</option>
+                            <option value="exited">Exited</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6"><label class="form-label">Provider</label><input type="text" class="form-control" id="tsaProvider"></div>
+                    <div class="col-md-6"><label class="form-label">Receiver</label><input type="text" class="form-control" id="tsaReceiver"></div>
+                    <div class="col-md-6"><label class="form-label">Monthly Cost ($)</label><input type="number" class="form-control" id="tsaMonthlyCost" step="0.01"></div>
+                    <div class="col-md-6"><label class="form-label">Exit Date</label><input type="date" class="form-control" id="tsaExitDate"></div>
+                    <div class="col-md-6"><label class="form-label">Readiness Score (0-100)</label><input type="number" class="form-control" id="tsaReadiness" min="0" max="100" value="0"></div>
+                </div>
+                <div class="mt-3"><label class="form-label">Description</label><textarea class="form-control" id="tsaDescription" rows="2"></textarea></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="createTSA()">Create TSA</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var allTSAs = [];
+
+async function loadData() {
+    var pid = document.getElementById('programSelect').value;
+    if (!pid) return;
+    await loadTSAs(pid);
+}
+
+async function loadTSAs(programId) {
+    try {
+        var data = await apiCall('/api/programs/' + programId + '/tsas');
+        allTSAs = data.tsas || [];
+        renderSummary();
+        renderTable();
+    } catch(err) {
+        console.error('Failed to load TSAs:', err);
+        document.getElementById('tsaTableBody').innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Failed to load TSAs</td></tr>';
+    }
+}
+
+function renderSummary() {
+    var total = allTSAs.length;
+    var active = allTSAs.filter(function(t) { return t.status === 'active'; }).length;
+    var cost = allTSAs.reduce(function(sum, t) { return sum + (parseFloat(t.monthly_cost) || 0); }, 0);
+    var readinessSum = allTSAs.reduce(function(sum, t) { return sum + (parseFloat(t.readiness_score) || 0); }, 0);
+    var avgReadiness = total > 0 ? Math.round(readinessSum / total) : 0;
+
+    document.getElementById('totalTSAs').textContent = total;
+    document.getElementById('activeTSAs').textContent = active;
+    document.getElementById('monthlyCost').textContent = '$' + cost.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+    document.getElementById('avgReadiness').textContent = avgReadiness + '%';
+}
+
+function getStatusBadge(status) {
+    var colors = {
+        active: 'background:#198754;',
+        exiting: 'background:#ffc107;color:#000;',
+        exited: 'background:#6c757d;',
+        extended: 'background:#fd7e14;'
+    };
+    var style = colors[status] || 'background:#6c757d;';
+    return '<span class="badge" style="' + style + '">' + (status || 'unknown') + '</span>';
+}
+
+function getReadinessBar(score) {
+    var s = parseFloat(score) || 0;
+    var color = s >= 75 ? '#198754' : s >= 50 ? '#ffc107' : s >= 25 ? '#fd7e14' : '#dc3545';
+    return '<div class="d-flex align-items-center gap-2">' +
+        '<div class="progress flex-grow-1" style="height:8px;min-width:80px;">' +
+        '<div class="progress-bar" style="width:' + s + '%;background:' + color + ';"></div></div>' +
+        '<small style="font-weight:600;color:' + color + ';">' + Math.round(s) + '%</small></div>';
+}
+
+function renderTable() {
+    var tbody = document.getElementById('tsaTableBody');
+    if (!allTSAs.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No TSAs found for this program</td></tr>';
+        return;
+    }
+    tbody.innerHTML = allTSAs.map(function(t) {
+        return '<tr>' +
+            '<td><strong>' + (t.service_name || t.name || '--') + '</strong></td>' +
+            '<td>' + (t.category || '--') + '</td>' +
+            '<td>' + (t.provider || '--') + '</td>' +
+            '<td>' + (t.receiver || '--') + '</td>' +
+            '<td>$' + (parseFloat(t.monthly_cost) || 0).toLocaleString() + '</td>' +
+            '<td>' + (t.exit_date || '--') + '</td>' +
+            '<td>' + getStatusBadge(t.status) + '</td>' +
+            '<td style="min-width:140px;">' + getReadinessBar(t.readiness_score) + '</td>' +
+            '</tr>';
+    }).join('');
+}
+
+function showAddTSA() {
+    if (!document.getElementById('programSelect').value) { alert('Select a program first.'); return; }
+    new bootstrap.Modal(document.getElementById('addTSAModal')).show();
+}
+
+async function createTSA() {
+    var pid = document.getElementById('programSelect').value;
+    var payload = {
+        service_name: document.getElementById('tsaName').value,
+        category: document.getElementById('tsaCategory').value,
+        status: document.getElementById('tsaStatus').value,
+        provider: document.getElementById('tsaProvider').value,
+        receiver: document.getElementById('tsaReceiver').value,
+        monthly_cost: parseFloat(document.getElementById('tsaMonthlyCost').value) || 0,
+        exit_date: document.getElementById('tsaExitDate').value || null,
+        readiness_score: parseInt(document.getElementById('tsaReadiness').value) || 0,
+        description: document.getElementById('tsaDescription').value
+    };
+    if (!payload.service_name) { alert('Service name is required'); return; }
+    try {
+        await apiCall('/api/programs/' + pid + '/tsas', 'POST', payload);
+        bootstrap.Modal.getInstance(document.getElementById('addTSAModal')).hide();
+        document.getElementById('tsaName').value = '';
+        document.getElementById('tsaProvider').value = '';
+        document.getElementById('tsaReceiver').value = '';
+        document.getElementById('tsaMonthlyCost').value = '';
+        document.getElementById('tsaExitDate').value = '';
+        document.getElementById('tsaReadiness').value = '0';
+        document.getElementById('tsaDescription').value = '';
+        loadData();
+    } catch(err) {
+        alert('Error creating TSA: ' + err.message);
+    }
+}
+</script>
 {% endblock %}
