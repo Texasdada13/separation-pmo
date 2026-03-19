@@ -1,15 +1,307 @@
 {% extends "base.html" %}
-{% block title %}raid - {{ app_name }}{% endblock %}
-{% block page_title %}raid{% endblock %}
+{% block title %}RAID Log - {{ app_name }}{% endblock %}
+{% block page_title %}RAID Log{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-4">
+<div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h2><i class="bi bi-kanban me-2"></i>raid</h2>
-        <p class="text-muted">This module is under construction.</p>
+        <h2><i class="bi bi-shield-exclamation me-2"></i>RAID Log</h2>
+        <p class="text-muted mb-0">Risks, Actions, Issues & Decisions</p>
+    </div>
+    <div class="d-flex gap-2">
+        <select id="programSelect" class="form-select form-select-sm" style="min-width:240px;" onchange="loadData()">
+            <option value="">Select program...</option>
+            {% for p in programs %}
+            <option value="{{ p.id }}">{{ p.name }}</option>
+            {% endfor %}
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="showAddItem()"><i class="bi bi-plus-lg me-1"></i>Add Item</button>
     </div>
 </div>
-<div class="cfi-demo-banner">
-    <i class="bi bi-info-circle"></i>
-    This page will be built in the next phase. <a href="/dashboard">Return to Dashboard</a>.
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="openRisks" style="color:#dc3545;">--</div>
+            <div class="metric-label">Open Risks</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="openIssues" style="color:#fd7e14;">--</div>
+            <div class="metric-label">Open Issues</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="overdueActions" style="color:#ffc107;">--</div>
+            <div class="metric-label">Overdue Actions</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="pendingDecisions" style="color:#0d6efd;">--</div>
+            <div class="metric-label">Pending Decisions</div>
+        </div>
+    </div>
 </div>
+
+<!-- Tab Navigation -->
+<ul class="nav nav-tabs mb-3" id="raidTabs">
+    <li class="nav-item"><a class="nav-link active" href="#" onclick="switchTab('');return false;">All</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('risk');return false;"><i class="bi bi-exclamation-triangle me-1"></i>Risks</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('action');return false;"><i class="bi bi-lightning me-1"></i>Actions</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('issue');return false;"><i class="bi bi-bug me-1"></i>Issues</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('decision');return false;"><i class="bi bi-signpost-2 me-1"></i>Decisions</a></li>
+</ul>
+
+<!-- RAID Table -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Type</th>
+                        <th>Workstream</th>
+                        <th>Priority</th>
+                        <th>Owner</th>
+                        <th>Raised</th>
+                        <th>Due</th>
+                        <th>Status</th>
+                        <th>Risk Score</th>
+                    </tr>
+                </thead>
+                <tbody id="raidTableBody">
+                    <tr><td colspan="9" class="text-center text-muted py-4">Select a program to view RAID items</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Add Item Modal -->
+<div class="modal fade" id="addItemModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Add RAID Item</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6"><label class="form-label">Type *</label>
+                        <select class="form-select" id="itemType" onchange="toggleRiskFields()">
+                            <option value="risk">Risk</option>
+                            <option value="action">Action</option>
+                            <option value="issue">Issue</option>
+                            <option value="decision">Decision</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6"><label class="form-label">Priority</label>
+                        <select class="form-select" id="itemPriority">
+                            <option value="critical">Critical</option>
+                            <option value="high">High</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-3 mt-3"><label class="form-label">Title *</label><input type="text" class="form-control" id="itemTitle"></div>
+                <div class="mb-3"><label class="form-label">Description</label><textarea class="form-control" id="itemDescription" rows="2"></textarea></div>
+                <div class="row g-3">
+                    <div class="col-md-6"><label class="form-label">Workstream</label><input type="text" class="form-control" id="itemWorkstream"></div>
+                    <div class="col-md-6"><label class="form-label">Owner</label><input type="text" class="form-control" id="itemOwner"></div>
+                    <div class="col-md-6"><label class="form-label">Due Date</label><input type="date" class="form-control" id="itemDueDate"></div>
+                    <div class="col-md-6"><label class="form-label">Status</label>
+                        <select class="form-select" id="itemStatus">
+                            <option value="open">Open</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="mitigated">Mitigated</option>
+                            <option value="closed">Closed</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row g-3 mt-1" id="riskScoreFields">
+                    <div class="col-md-6"><label class="form-label">Impact (1-5)</label><input type="number" class="form-control" id="itemImpact" min="1" max="5" value="3"></div>
+                    <div class="col-md-6"><label class="form-label">Likelihood (1-5)</label><input type="number" class="form-control" id="itemLikelihood" min="1" max="5" value="3"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="createItem()">Create Item</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var allItems = [];
+var currentType = '';
+
+function toggleRiskFields() {
+    var isRisk = document.getElementById('itemType').value === 'risk';
+    document.getElementById('riskScoreFields').style.display = isRisk ? '' : 'none';
+}
+
+function switchTab(type) {
+    currentType = type;
+    document.querySelectorAll('#raidTabs .nav-link').forEach(function(el) { el.classList.remove('active'); });
+    event.target.closest('.nav-link').classList.add('active');
+    var pid = document.getElementById('programSelect').value;
+    if (pid) loadRAID(pid, type);
+}
+
+async function loadData() {
+    var pid = document.getElementById('programSelect').value;
+    if (!pid) return;
+    await loadRAID(pid, currentType);
+}
+
+async function loadRAID(programId, type) {
+    try {
+        var url = '/api/programs/' + programId + '/raid';
+        if (type) url += '?type=' + type;
+        var data = await apiCall(url);
+        allItems = data.items || [];
+        renderSummary();
+        renderTable();
+    } catch(err) {
+        console.error('Failed to load RAID items:', err);
+        document.getElementById('raidTableBody').innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">Failed to load RAID items</td></tr>';
+    }
+}
+
+function renderSummary() {
+    // For summary, count across all types from the loaded data
+    var today = new Date().toISOString().split('T')[0];
+    var openRisks = allItems.filter(function(i) { return i.item_type === 'risk' && i.status !== 'closed' && i.status !== 'mitigated'; }).length;
+    var openIssues = allItems.filter(function(i) { return i.item_type === 'issue' && i.status !== 'closed'; }).length;
+    var overdueActions = allItems.filter(function(i) { return i.item_type === 'action' && i.status !== 'closed' && i.due_date && i.due_date < today; }).length;
+    var pendingDecisions = allItems.filter(function(i) { return i.item_type === 'decision' && i.status !== 'closed'; }).length;
+
+    document.getElementById('openRisks').textContent = openRisks;
+    document.getElementById('openIssues').textContent = openIssues;
+    document.getElementById('overdueActions').textContent = overdueActions;
+    document.getElementById('pendingDecisions').textContent = pendingDecisions;
+}
+
+function getTypeBadge(type) {
+    var styles = {
+        risk: 'background:#dc354520;color:#dc3545;',
+        action: 'background:#0d6efd20;color:#0d6efd;',
+        issue: 'background:#fd7e1420;color:#fd7e14;',
+        decision: 'background:#6f42c120;color:#6f42c1;'
+    };
+    var icons = {risk: 'bi-exclamation-triangle', action: 'bi-lightning', issue: 'bi-bug', decision: 'bi-signpost-2'};
+    return '<span class="badge" style="' + (styles[type] || '') + '"><i class="bi ' + (icons[type] || '') + ' me-1"></i>' + (type || 'unknown') + '</span>';
+}
+
+function getPriorityBadge(priority) {
+    var colors = {
+        critical: 'background:#dc3545;',
+        high: 'background:#fd7e14;',
+        medium: 'background:#ffc107;color:#000;',
+        low: 'background:#198754;'
+    };
+    return '<span class="badge" style="' + (colors[priority] || 'background:#6c757d;') + '">' + (priority || '--') + '</span>';
+}
+
+function getStatusBadge(status) {
+    var colors = {
+        open: 'background:#0d6efd;',
+        in_progress: 'background:#0dcaf0;color:#000;',
+        mitigated: 'background:#198754;',
+        closed: 'background:#6c757d;',
+        resolved: 'background:#198754;',
+        approved: 'background:#198754;',
+        deferred: 'background:#ffc107;color:#000;'
+    };
+    return '<span class="badge" style="' + (colors[status] || 'background:#6c757d;') + '">' + (status || '--').replace('_', ' ') + '</span>';
+}
+
+function getRiskScore(item) {
+    if (item.item_type !== 'risk') return '--';
+    var impact = parseInt(item.impact) || 0;
+    var likelihood = parseInt(item.likelihood) || 0;
+    var score = impact * likelihood;
+    var color = score >= 16 ? '#dc3545' : score >= 9 ? '#fd7e14' : score >= 4 ? '#ffc107' : '#198754';
+    return '<span style="font-weight:700;color:' + color + ';">' + impact + 'x' + likelihood + '=' + score + '</span>';
+}
+
+function renderTable() {
+    var tbody = document.getElementById('raidTableBody');
+    if (!allItems.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">No items found</td></tr>';
+        return;
+    }
+    tbody.innerHTML = allItems.map(function(item) {
+        var today = new Date().toISOString().split('T')[0];
+        var isOverdue = item.due_date && item.due_date < today && item.status !== 'closed' && item.status !== 'mitigated';
+        return '<tr onclick="quickStatusUpdate(\'' + item.id + '\')" style="cursor:pointer;"' + (isOverdue ? ' class="table-danger"' : '') + '>' +
+            '<td><strong>' + (item.title || '--') + '</strong></td>' +
+            '<td>' + getTypeBadge(item.item_type) + '</td>' +
+            '<td><small>' + (item.workstream || '--') + '</small></td>' +
+            '<td>' + getPriorityBadge(item.priority) + '</td>' +
+            '<td>' + (item.owner || '--') + '</td>' +
+            '<td><small>' + (item.raised_date || item.created_at || '--') + '</small></td>' +
+            '<td><small' + (isOverdue ? ' class="text-danger fw-bold"' : '') + '>' + (item.due_date || '--') + '</small></td>' +
+            '<td>' + getStatusBadge(item.status) + '</td>' +
+            '<td>' + getRiskScore(item) + '</td>' +
+            '</tr>';
+    }).join('');
+}
+
+async function quickStatusUpdate(itemId) {
+    var item = allItems.find(function(i) { return i.id === itemId; });
+    if (!item) return;
+    var statuses = ['open', 'in_progress', 'mitigated', 'closed'];
+    var currentIdx = statuses.indexOf(item.status);
+    var nextStatus = statuses[(currentIdx + 1) % statuses.length];
+    if (!window.confirm('Move "' + item.title + '" to ' + nextStatus.replace('_', ' ') + '?')) return;
+    try {
+        await apiCall('/api/raid/' + itemId, 'PUT', {status: nextStatus});
+        loadData();
+    } catch(err) {
+        alert('Error updating item: ' + err.message);
+    }
+}
+
+function showAddItem() {
+    if (!document.getElementById('programSelect').value) { alert('Select a program first.'); return; }
+    toggleRiskFields();
+    new bootstrap.Modal(document.getElementById('addItemModal')).show();
+}
+
+async function createItem() {
+    var pid = document.getElementById('programSelect').value;
+    var payload = {
+        item_type: document.getElementById('itemType').value,
+        title: document.getElementById('itemTitle').value,
+        description: document.getElementById('itemDescription').value,
+        workstream: document.getElementById('itemWorkstream').value,
+        priority: document.getElementById('itemPriority').value,
+        owner: document.getElementById('itemOwner').value,
+        due_date: document.getElementById('itemDueDate').value || null,
+        status: document.getElementById('itemStatus').value
+    };
+    if (payload.item_type === 'risk') {
+        payload.impact = parseInt(document.getElementById('itemImpact').value) || 3;
+        payload.likelihood = parseInt(document.getElementById('itemLikelihood').value) || 3;
+    }
+    if (!payload.title) { alert('Title is required'); return; }
+    try {
+        await apiCall('/api/programs/' + pid + '/raid', 'POST', payload);
+        bootstrap.Modal.getInstance(document.getElementById('addItemModal')).hide();
+        document.getElementById('itemTitle').value = '';
+        document.getElementById('itemDescription').value = '';
+        document.getElementById('itemWorkstream').value = '';
+        document.getElementById('itemOwner').value = '';
+        document.getElementById('itemDueDate').value = '';
+        loadData();
+    } catch(err) {
+        alert('Error creating item: ' + err.message);
+    }
+}
+</script>
 {% endblock %}

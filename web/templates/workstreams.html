@@ -1,15 +1,79 @@
 {% extends "base.html" %}
-{% block title %}workstreams - {{ app_name }}{% endblock %}
-{% block page_title %}workstreams{% endblock %}
+{% block title %}Workstreams - {{ app_name }}{% endblock %}
+{% block page_title %}Workstreams{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-4">
+<div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h2><i class="bi bi-kanban me-2"></i>workstreams</h2>
-        <p class="text-muted">This module is under construction.</p>
+        <h2><i class="bi bi-diagram-3 me-2"></i>Workstream Tracker</h2>
+        <p class="text-muted mb-0">Track progress across all functional workstreams</p>
     </div>
+    <select id="programSelect" class="form-select form-select-sm" style="min-width:240px;" onchange="loadWorkstreams()">
+        <option value="">Select program...</option>
+        {% for p in programs %}
+        <option value="{{ p.id }}">{{ p.name }}</option>
+        {% endfor %}
+    </select>
 </div>
-<div class="cfi-demo-banner">
-    <i class="bi bi-info-circle"></i>
-    This page will be built in the next phase. <a href="/dashboard">Return to Dashboard</a>.
+
+<div id="wsContainer">
+    <div class="cfi-demo-banner"><i class="bi bi-info-circle"></i> Select a program above to view workstream status.</div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var wsIcons = {
+    'Finance': 'bi-cash-stack', 'Human Resources': 'bi-people', 'Information Technology': 'bi-cpu',
+    'Legal': 'bi-briefcase', 'Operations': 'bi-gear', 'Procurement': 'bi-cart3',
+    'Supply Chain': 'bi-truck', 'Commercial': 'bi-graph-up', 'Communications': 'bi-megaphone'
+};
+var wsColors = {
+    'Finance': '#198754', 'Human Resources': '#0dcaf0', 'Information Technology': '#6f42c1',
+    'Legal': '#fd7e14', 'Operations': '#20c997', 'Procurement': '#dc3545',
+    'Supply Chain': '#ffc107', 'Commercial': '#0d6efd', 'Communications': '#6c757d'
+};
+
+async function loadWorkstreams() {
+    var pid = document.getElementById('programSelect').value;
+    if (!pid) return;
+    var wsData = await apiCall('/api/programs/' + pid + '/workstreams');
+    var taskData = await apiCall('/api/programs/' + pid + '/tasks');
+    var tasks = taskData.tasks || [];
+    var container = document.getElementById('wsContainer');
+
+    container.innerHTML = (wsData.workstreams || []).map(function(ws) {
+        var wsTasks = tasks.filter(function(t) { return t.workstream_id === ws.id; });
+        var complete = wsTasks.filter(function(t) { return t.status === 'complete'; }).length;
+        var inProgress = wsTasks.filter(function(t) { return t.status === 'in_progress'; }).length;
+        var blocked = wsTasks.filter(function(t) { return t.status === 'blocked'; }).length;
+        var icon = wsIcons[ws.name] || 'bi-folder';
+        var color = wsColors[ws.name] || '#6c757d';
+        var statusBadge = ws.status === 'on_track' ? 'bg-success' : ws.status === 'at_risk' ? 'bg-warning text-dark' : ws.status === 'behind' ? 'bg-danger' : 'bg-info';
+
+        return '<div class="card mb-3" style="border-left:4px solid ' + color + ';">' +
+            '<div class="card-body">' +
+            '<div class="row align-items-center">' +
+            '<div class="col-md-4">' +
+            '<div class="d-flex align-items-center gap-3">' +
+            '<div style="width:44px;height:44px;border-radius:10px;background:' + color + '20;display:flex;align-items:center;justify-content:center;"><i class="bi ' + icon + '" style="color:' + color + ';font-size:1.2rem;"></i></div>' +
+            '<div><h5 class="mb-0">' + ws.name + '</h5>' +
+            (ws.lead_name ? '<small class="text-muted"><i class="bi bi-person me-1"></i>' + ws.lead_name + '</small>' : '') +
+            '</div></div></div>' +
+            '<div class="col-md-3">' +
+            '<div class="d-flex justify-content-between mb-1"><small>Progress</small><small><strong>' + ws.percent_complete + '%</strong></small></div>' +
+            '<div class="progress" style="height:8px;"><div class="progress-bar" style="width:' + ws.percent_complete + '%;background:' + color + ';"></div></div>' +
+            '</div>' +
+            '<div class="col-md-3">' +
+            '<div class="d-flex gap-3">' +
+            '<div class="text-center"><div style="font-size:1.1rem;font-weight:700;">' + wsTasks.length + '</div><small class="text-muted">Tasks</small></div>' +
+            '<div class="text-center"><div style="font-size:1.1rem;font-weight:700;color:#198754;">' + complete + '</div><small class="text-muted">Done</small></div>' +
+            '<div class="text-center"><div style="font-size:1.1rem;font-weight:700;color:#0dcaf0;">' + inProgress + '</div><small class="text-muted">Active</small></div>' +
+            (blocked ? '<div class="text-center"><div style="font-size:1.1rem;font-weight:700;color:#dc3545;">' + blocked + '</div><small class="text-muted">Blocked</small></div>' : '') +
+            '</div></div>' +
+            '<div class="col-md-2 text-end">' +
+            '<span class="badge ' + statusBadge + '">' + ws.status.replace('_', ' ').toUpperCase() + '</span>' +
+            '</div></div></div></div>';
+    }).join('');
+}
+</script>
 {% endblock %}

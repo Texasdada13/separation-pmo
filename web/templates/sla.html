@@ -1,15 +1,166 @@
 {% extends "base.html" %}
-{% block title %}sla - {{ app_name }}{% endblock %}
-{% block page_title %}sla{% endblock %}
+{% block title %}SLA Compliance - {{ app_name }}{% endblock %}
+{% block page_title %}SLA Compliance{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-4">
+<div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h2><i class="bi bi-kanban me-2"></i>sla</h2>
-        <p class="text-muted">This module is under construction.</p>
+        <h2><i class="bi bi-speedometer2 me-2"></i>SLA Compliance</h2>
+        <p class="text-muted mb-0">Monitor service level performance across all TSAs</p>
+    </div>
+    <select id="programSelect" class="form-select form-select-sm" style="min-width:240px;" onchange="loadData()">
+        <option value="">Select program...</option>
+        {% for p in programs %}
+        <option value="{{ p.id }}">{{ p.name }}</option>
+        {% endfor %}
+    </select>
+</div>
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4" id="summaryCards">
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="totalSLAs">--</div>
+            <div class="metric-label">Total SLAs</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="meetingCount" style="color:#198754;">--</div>
+            <div class="metric-label">Meeting Target</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="atRiskCount" style="color:#ffc107;">--</div>
+            <div class="metric-label">At Risk</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="breachedCount" style="color:#dc3545;">--</div>
+            <div class="metric-label">Breached</div>
+        </div>
     </div>
 </div>
-<div class="cfi-demo-banner">
-    <i class="bi bi-info-circle"></i>
-    This page will be built in the next phase. <a href="/dashboard">Return to Dashboard</a>.
+
+<!-- SLA Table -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-table me-1"></i>SLA Metrics by TSA</strong>
+        <div class="d-flex gap-2">
+            <select id="statusFilter" class="form-select form-select-sm" style="width:auto;" onchange="renderTable()">
+                <option value="">All Statuses</option>
+                <option value="meeting">Meeting</option>
+                <option value="at_risk">At Risk</option>
+                <option value="breached">Breached</option>
+            </select>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>TSA</th>
+                        <th>Metric</th>
+                        <th>Target</th>
+                        <th>Current</th>
+                        <th>Unit</th>
+                        <th>Status</th>
+                        <th>Breaches</th>
+                    </tr>
+                </thead>
+                <tbody id="slaTableBody">
+                    <tr><td colspan="7" class="text-center text-muted py-4">Select a program to view SLA compliance</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var allSLAs = [];
+
+async function loadData() {
+    var pid = document.getElementById('programSelect').value;
+    if (!pid) return;
+    try {
+        var tsaData = await apiCall('/api/programs/' + pid + '/tsas');
+        var tsas = tsaData.tsas || [];
+        allSLAs = [];
+        for (var i = 0; i < tsas.length; i++) {
+            try {
+                var slaData = await apiCall('/api/tsas/' + tsas[i].id + '/slas');
+                var slas = slaData.slas || [];
+                slas.forEach(function(sla) {
+                    sla._tsa_name = tsas[i].service_name || tsas[i].name || 'Unknown TSA';
+                    allSLAs.push(sla);
+                });
+            } catch(e) {
+                console.warn('Could not load SLAs for TSA ' + tsas[i].id, e);
+            }
+        }
+        renderSummary();
+        renderTable();
+    } catch(err) {
+        console.error('Failed to load TSAs:', err);
+        document.getElementById('slaTableBody').innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Failed to load data</td></tr>';
+    }
+}
+
+function renderSummary() {
+    var total = allSLAs.length;
+    var meeting = allSLAs.filter(function(s) { return s.status === 'meeting'; }).length;
+    var atRisk = allSLAs.filter(function(s) { return s.status === 'at_risk'; }).length;
+    var breached = allSLAs.filter(function(s) { return s.status === 'breached'; }).length;
+
+    document.getElementById('totalSLAs').textContent = total;
+    document.getElementById('meetingCount').textContent = meeting;
+    document.getElementById('atRiskCount').textContent = atRisk;
+    document.getElementById('breachedCount').textContent = breached;
+}
+
+function getStatusBadge(status) {
+    var styles = {
+        meeting: 'background:#198754;',
+        at_risk: 'background:#ffc107;color:#000;',
+        breached: 'background:#dc3545;'
+    };
+    var labels = {
+        meeting: 'Meeting',
+        at_risk: 'At Risk',
+        breached: 'Breached'
+    };
+    var style = styles[status] || 'background:#6c757d;';
+    return '<span class="badge" style="' + style + '">' + (labels[status] || status || 'Unknown') + '</span>';
+}
+
+function renderTable() {
+    var tbody = document.getElementById('slaTableBody');
+    var filter = document.getElementById('statusFilter').value;
+    var filtered = allSLAs;
+    if (filter) {
+        filtered = allSLAs.filter(function(s) { return s.status === filter; });
+    }
+    if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No SLA metrics found</td></tr>';
+        return;
+    }
+    tbody.innerHTML = filtered.map(function(sla) {
+        var breachCount = parseInt(sla.breach_count) || 0;
+        var breachColor = breachCount > 0 ? 'color:#dc3545;font-weight:700;' : '';
+        return '<tr>' +
+            '<td><strong>' + (sla._tsa_name || '--') + '</strong></td>' +
+            '<td>' + (sla.metric_name || sla.name || '--') + '</td>' +
+            '<td>' + (sla.target !== undefined ? sla.target : '--') + '</td>' +
+            '<td>' + (sla.current_value !== undefined ? sla.current_value : '--') + '</td>' +
+            '<td><small>' + (sla.unit || '--') + '</small></td>' +
+            '<td>' + getStatusBadge(sla.status) + '</td>' +
+            '<td style="' + breachColor + '">' + breachCount + '</td>' +
+            '</tr>';
+    }).join('');
+}
+</script>
 {% endblock %}

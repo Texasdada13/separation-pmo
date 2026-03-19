@@ -1,15 +1,368 @@
 {% extends "base.html" %}
-{% block title %}timesheet - {{ app_name }}{% endblock %}
-{% block page_title %}timesheet{% endblock %}
+{% block title %}Timesheets - {{ app_name }}{% endblock %}
+{% block page_title %}Timesheets{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-4">
+<div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h2><i class="bi bi-kanban me-2"></i>timesheet</h2>
-        <p class="text-muted">This module is under construction.</p>
+        <h2><i class="bi bi-clock-history me-2"></i>Work Tracking / Timesheets</h2>
+        <p class="text-muted mb-0">Track hours by person, workstream, and type</p>
+    </div>
+    <div class="d-flex gap-2">
+        <select id="programSelect" class="form-select form-select-sm" style="min-width:240px;" onchange="loadData()">
+            <option value="">Select program...</option>
+            {% for p in programs %}
+            <option value="{{ p.id }}">{{ p.name }}</option>
+            {% endfor %}
+        </select>
+        <select id="typeFilter" class="form-select form-select-sm" style="min-width:130px;" onchange="applyFilter()">
+            <option value="">All Types</option>
+            <option value="internal">Internal</option>
+            <option value="client">Client</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="showLogTime()"><i class="bi bi-plus-lg me-1"></i>Log Time</button>
     </div>
 </div>
-<div class="cfi-demo-banner">
-    <i class="bi bi-info-circle"></i>
-    This page will be built in the next phase. <a href="/dashboard">Return to Dashboard</a>.
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="totalEntries">--</div>
+            <div class="metric-label">Total Entries</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="totalHours" style="color:#0d6efd;">--</div>
+            <div class="metric-label">Total Hours</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="billableHours" style="color:#198754;">--</div>
+            <div class="metric-label">Client Hours</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="weeklyTotal" style="color:#6f42c1;">--</div>
+            <div class="metric-label">This Week</div>
+        </div>
+    </div>
 </div>
+
+<!-- View Tabs -->
+<ul class="nav nav-tabs mb-3" id="viewTabs">
+    <li class="nav-item"><a class="nav-link active" href="#" onclick="switchView('detailed');return false;"><i class="bi bi-list-ul me-1"></i>Detailed</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchView('summary');return false;"><i class="bi bi-bar-chart me-1"></i>Summary</a></li>
+</ul>
+
+<!-- Detailed View -->
+<div id="detailedView">
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Person</th>
+                            <th>Type</th>
+                            <th>Workstream</th>
+                            <th>Activity</th>
+                            <th>Hours</th>
+                            <th>Description</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="timeTableBody">
+                        <tr><td colspan="8" class="text-center text-muted py-4">Select a program to view time entries</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary View -->
+<div id="summaryView" class="d-none">
+    <div class="row g-3">
+        <div class="col-md-7">
+            <div class="card">
+                <div class="card-header"><strong>Hours by Workstream</strong></div>
+                <div class="card-body">
+                    <canvas id="workstreamChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-5">
+            <div class="card">
+                <div class="card-header"><strong>Hours by Person</strong></div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead><tr><th>Person</th><th>Total Hours</th><th>Client Hours</th></tr></thead>
+                            <tbody id="personSummaryBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Log Time Modal -->
+<div class="modal fade" id="logTimeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Log Time</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6"><label class="form-label">Person *</label><input type="text" class="form-control" id="timePerson"></div>
+                    <div class="col-md-6"><label class="form-label">Type</label>
+                        <select class="form-select" id="timeType">
+                            <option value="internal">Internal</option>
+                            <option value="client">Client</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6"><label class="form-label">Date *</label><input type="date" class="form-control" id="timeDate"></div>
+                    <div class="col-md-6"><label class="form-label">Hours *</label><input type="number" class="form-control" id="timeHours" step="0.25" min="0.25"></div>
+                    <div class="col-md-6"><label class="form-label">Workstream</label><input type="text" class="form-control" id="timeWorkstream"></div>
+                    <div class="col-md-6"><label class="form-label">Activity Category</label>
+                        <select class="form-select" id="timeActivity">
+                            <option value="planning">Planning</option>
+                            <option value="execution">Execution</option>
+                            <option value="review">Review</option>
+                            <option value="meeting">Meeting</option>
+                            <option value="documentation">Documentation</option>
+                            <option value="testing">Testing</option>
+                            <option value="support">Support</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-3"><label class="form-label">Description</label><textarea class="form-control" id="timeDescription" rows="2"></textarea></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="createTimeEntry()">Log Time</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var allEntries = [];
+var filteredEntries = [];
+var workstreamChart = null;
+
+function switchView(view) {
+    document.getElementById('detailedView').classList.toggle('d-none', view !== 'detailed');
+    document.getElementById('summaryView').classList.toggle('d-none', view !== 'summary');
+    document.querySelectorAll('#viewTabs .nav-link').forEach(function(el) { el.classList.remove('active'); });
+    event.target.closest('.nav-link').classList.add('active');
+    if (view === 'summary') renderSummary();
+}
+
+async function loadData() {
+    var pid = document.getElementById('programSelect').value;
+    if (!pid) return;
+    await loadTimeEntries(pid);
+}
+
+async function loadTimeEntries(programId) {
+    try {
+        var data = await apiCall('/api/programs/' + programId + '/time-entries');
+        allEntries = data.entries || data.time_entries || [];
+        applyFilter();
+    } catch(err) {
+        console.error('Failed to load time entries:', err);
+        document.getElementById('timeTableBody').innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Failed to load time entries</td></tr>';
+    }
+}
+
+function applyFilter() {
+    var typeFilter = document.getElementById('typeFilter').value;
+    filteredEntries = allEntries;
+    if (typeFilter) {
+        filteredEntries = allEntries.filter(function(e) { return e.person_type === typeFilter; });
+    }
+    renderCards();
+    renderDetailedTable();
+    if (!document.getElementById('summaryView').classList.contains('d-none')) {
+        renderSummary();
+    }
+}
+
+function renderCards() {
+    var total = filteredEntries.length;
+    var totalHrs = filteredEntries.reduce(function(s, e) { return s + (parseFloat(e.hours) || 0); }, 0);
+    var clientHrs = filteredEntries.filter(function(e) { return e.person_type === 'client'; })
+        .reduce(function(s, e) { return s + (parseFloat(e.hours) || 0); }, 0);
+
+    // Calculate this week's hours
+    var now = new Date();
+    var dayOfWeek = now.getDay();
+    var monday = new Date(now);
+    monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    monday.setHours(0, 0, 0, 0);
+    var weekHrs = filteredEntries.filter(function(e) {
+        if (!e.date) return false;
+        var d = new Date(e.date);
+        return d >= monday;
+    }).reduce(function(s, e) { return s + (parseFloat(e.hours) || 0); }, 0);
+
+    document.getElementById('totalEntries').textContent = total;
+    document.getElementById('totalHours').textContent = totalHrs.toFixed(1) + 'h';
+    document.getElementById('billableHours').textContent = clientHrs.toFixed(1) + 'h';
+    document.getElementById('weeklyTotal').textContent = weekHrs.toFixed(1) + 'h';
+}
+
+function getTypeBadge(type) {
+    if (type === 'client') return '<span class="badge" style="background:#0dcaf0;color:#000;">Client</span>';
+    return '<span class="badge" style="background:#6f42c120;color:#6f42c1;">Internal</span>';
+}
+
+function getStatusBadge(status) {
+    var colors = {
+        submitted: 'background:#0d6efd;',
+        approved: 'background:#198754;',
+        rejected: 'background:#dc3545;',
+        draft: 'background:#6c757d;'
+    };
+    return '<span class="badge" style="' + (colors[status] || 'background:#6c757d;') + '">' + (status || 'submitted') + '</span>';
+}
+
+function renderDetailedTable() {
+    var tbody = document.getElementById('timeTableBody');
+    if (!filteredEntries.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No time entries found</td></tr>';
+        return;
+    }
+    // Sort by date descending
+    var sorted = filteredEntries.slice().sort(function(a, b) {
+        return (b.date || '').localeCompare(a.date || '');
+    });
+    tbody.innerHTML = sorted.map(function(e) {
+        return '<tr>' +
+            '<td>' + (e.date || '--') + '</td>' +
+            '<td><strong>' + (e.person_name || e.person || '--') + '</strong></td>' +
+            '<td>' + getTypeBadge(e.person_type) + '</td>' +
+            '<td><small>' + (e.workstream || '--') + '</small></td>' +
+            '<td><small>' + (e.activity || e.activity_category || '--') + '</small></td>' +
+            '<td><strong>' + (parseFloat(e.hours) || 0).toFixed(1) + 'h</strong></td>' +
+            '<td><small class="text-muted">' + (e.description || '--') + '</small></td>' +
+            '<td>' + getStatusBadge(e.status) + '</td>' +
+            '</tr>';
+    }).join('');
+}
+
+function renderSummary() {
+    renderWorkstreamChart();
+    renderPersonTable();
+}
+
+function renderWorkstreamChart() {
+    // Aggregate hours by workstream
+    var byWS = {};
+    filteredEntries.forEach(function(e) {
+        var ws = e.workstream || 'Unassigned';
+        byWS[ws] = (byWS[ws] || 0) + (parseFloat(e.hours) || 0);
+    });
+
+    var labels = Object.keys(byWS).sort(function(a, b) { return byWS[b] - byWS[a]; });
+    var values = labels.map(function(l) { return parseFloat(byWS[l].toFixed(1)); });
+
+    var colors = ['#3A7BD5', '#198754', '#fd7e14', '#dc3545', '#6f42c1', '#0dcaf0', '#ffc107', '#20c997', '#e83e8c', '#6c757d'];
+
+    var ctx = document.getElementById('workstreamChart').getContext('2d');
+    if (workstreamChart) workstreamChart.destroy();
+    workstreamChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Hours',
+                data: values,
+                backgroundColor: labels.map(function(_, i) { return colors[i % colors.length]; }),
+                borderRadius: 4
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: { title: { display: true, text: 'Hours' }, beginAtZero: true }
+            }
+        }
+    });
+}
+
+function renderPersonTable() {
+    var byPerson = {};
+    filteredEntries.forEach(function(e) {
+        var name = e.person_name || e.person || 'Unknown';
+        if (!byPerson[name]) byPerson[name] = { total: 0, client: 0 };
+        var hrs = parseFloat(e.hours) || 0;
+        byPerson[name].total += hrs;
+        if (e.person_type === 'client') byPerson[name].client += hrs;
+    });
+
+    var persons = Object.keys(byPerson).sort(function(a, b) { return byPerson[b].total - byPerson[a].total; });
+    var tbody = document.getElementById('personSummaryBody');
+    if (!persons.length) {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No data</td></tr>';
+        return;
+    }
+    tbody.innerHTML = persons.map(function(name) {
+        var p = byPerson[name];
+        return '<tr>' +
+            '<td><strong>' + name + '</strong></td>' +
+            '<td>' + p.total.toFixed(1) + 'h</td>' +
+            '<td>' + p.client.toFixed(1) + 'h</td>' +
+            '</tr>';
+    }).join('');
+}
+
+function showLogTime() {
+    if (!document.getElementById('programSelect').value) { alert('Select a program first.'); return; }
+    // Default to today's date
+    var today = new Date().toISOString().split('T')[0];
+    document.getElementById('timeDate').value = today;
+    new bootstrap.Modal(document.getElementById('logTimeModal')).show();
+}
+
+async function createTimeEntry() {
+    var pid = document.getElementById('programSelect').value;
+    var payload = {
+        person_name: document.getElementById('timePerson').value,
+        person_type: document.getElementById('timeType').value,
+        date: document.getElementById('timeDate').value,
+        hours: parseFloat(document.getElementById('timeHours').value) || 0,
+        workstream: document.getElementById('timeWorkstream').value,
+        activity_category: document.getElementById('timeActivity').value,
+        description: document.getElementById('timeDescription').value
+    };
+    if (!payload.person_name) { alert('Person is required'); return; }
+    if (!payload.date) { alert('Date is required'); return; }
+    if (!payload.hours || payload.hours <= 0) { alert('Hours must be greater than 0'); return; }
+    try {
+        await apiCall('/api/programs/' + pid + '/time-entries', 'POST', payload);
+        bootstrap.Modal.getInstance(document.getElementById('logTimeModal')).hide();
+        document.getElementById('timePerson').value = '';
+        document.getElementById('timeHours').value = '';
+        document.getElementById('timeWorkstream').value = '';
+        document.getElementById('timeDescription').value = '';
+        loadData();
+    } catch(err) {
+        alert('Error logging time: ' + err.message);
+    }
+}
+</script>
 {% endblock %}

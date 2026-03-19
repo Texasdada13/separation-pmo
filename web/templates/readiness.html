@@ -1,15 +1,177 @@
 {% extends "base.html" %}
-{% block title %}readiness - {{ app_name }}{% endblock %}
-{% block page_title %}readiness{% endblock %}
+{% block title %}Day 1 / Exit Readiness - {{ app_name }}{% endblock %}
+{% block page_title %}Readiness{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-4">
+<div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h2><i class="bi bi-kanban me-2"></i>readiness</h2>
-        <p class="text-muted">This module is under construction.</p>
+        <h2><i class="bi bi-clipboard-check me-2"></i>Day 1 / Exit Readiness</h2>
+        <p class="text-muted mb-0">Track readiness checklists for Day 1 and Exit milestones</p>
+    </div>
+    <select id="programSelect" class="form-select form-select-sm" style="min-width:240px;" onchange="loadData()">
+        <option value="">Select program...</option>
+        {% for p in programs %}
+        <option value="{{ p.id }}">{{ p.name }}</option>
+        {% endfor %}
+    </select>
+</div>
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="totalItems">--</div>
+            <div class="metric-label">Total Items</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="readyCount" style="color:#198754;">--</div>
+            <div class="metric-label">Ready</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="blockedCount" style="color:#dc3545;">--</div>
+            <div class="metric-label">Blocked</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="readinessPercent" style="color:#0d6efd;">--</div>
+            <div class="metric-label">Overall Readiness</div>
+        </div>
     </div>
 </div>
-<div class="cfi-demo-banner">
-    <i class="bi bi-info-circle"></i>
-    This page will be built in the next phase. <a href="/dashboard">Return to Dashboard</a>.
+
+<!-- Tabs -->
+<ul class="nav nav-tabs mb-3" id="readinessTabs">
+    <li class="nav-item">
+        <a class="nav-link active" href="#" onclick="switchCategory('day1');return false;">
+            <i class="bi bi-calendar-event me-1"></i>Day 1 Readiness
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" href="#" onclick="switchCategory('exit');return false;">
+            <i class="bi bi-door-open me-1"></i>Exit Readiness
+        </a>
+    </li>
+</ul>
+
+<!-- Checklist Container -->
+<div id="checklistContainer">
+    <div class="cfi-demo-banner"><i class="bi bi-info-circle"></i> Select a program above to view readiness checklists.</div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var currentCategory = 'day1';
+var allItems = [];
+
+function switchCategory(cat) {
+    currentCategory = cat;
+    document.querySelectorAll('#readinessTabs .nav-link').forEach(function(el) { el.classList.remove('active'); });
+    event.target.closest('.nav-link').classList.add('active');
+    var pid = document.getElementById('programSelect').value;
+    if (pid) loadReadiness(pid, cat);
+}
+
+async function loadData() {
+    var pid = document.getElementById('programSelect').value;
+    if (!pid) return;
+    await loadReadiness(pid, currentCategory);
+}
+
+async function loadReadiness(programId, category) {
+    try {
+        var data = await apiCall('/api/programs/' + programId + '/readiness?category=' + category);
+        allItems = data.items || [];
+        renderSummary();
+        renderChecklist();
+    } catch(err) {
+        console.error('Failed to load readiness data:', err);
+        document.getElementById('checklistContainer').innerHTML =
+            '<div class="card"><div class="card-body text-center text-muted py-4">Failed to load readiness items</div></div>';
+    }
+}
+
+function renderSummary() {
+    var total = allItems.length;
+    var ready = allItems.filter(function(i) { return i.status === 'ready'; }).length;
+    var blocked = allItems.filter(function(i) { return i.status === 'blocked'; }).length;
+    var pct = total > 0 ? Math.round((ready / total) * 100) : 0;
+
+    document.getElementById('totalItems').textContent = total;
+    document.getElementById('readyCount').textContent = ready;
+    document.getElementById('blockedCount').textContent = blocked;
+    document.getElementById('readinessPercent').textContent = pct + '%';
+}
+
+function getStatusBadge(status) {
+    var styles = {
+        not_started: 'background:#6c757d;',
+        in_progress: 'background:#0d6efd;',
+        ready: 'background:#198754;',
+        blocked: 'background:#dc3545;'
+    };
+    var labels = {
+        not_started: 'Not Started',
+        in_progress: 'In Progress',
+        ready: 'Ready',
+        blocked: 'Blocked'
+    };
+    var style = styles[status] || 'background:#6c757d;';
+    return '<span class="badge" style="' + style + '">' + (labels[status] || status || 'Unknown') + '</span>';
+}
+
+function renderChecklist() {
+    var container = document.getElementById('checklistContainer');
+    if (!allItems.length) {
+        container.innerHTML = '<div class="card"><div class="card-body text-center text-muted py-4">No readiness items found for this category</div></div>';
+        return;
+    }
+
+    // Group by workstream
+    var groups = {};
+    allItems.forEach(function(item) {
+        var ws = item.workstream || 'General';
+        if (!groups[ws]) groups[ws] = [];
+        groups[ws].push(item);
+    });
+
+    var html = '';
+    Object.keys(groups).sort().forEach(function(wsName) {
+        var items = groups[wsName];
+        var wsReady = items.filter(function(i) { return i.status === 'ready'; }).length;
+        var wsTotal = items.length;
+        var wsPct = Math.round((wsReady / wsTotal) * 100);
+        var barColor = wsPct >= 75 ? '#198754' : wsPct >= 50 ? '#ffc107' : '#dc3545';
+
+        html += '<div class="card mb-3">';
+        html += '<div class="card-header d-flex justify-content-between align-items-center">';
+        html += '<strong><i class="bi bi-folder me-1"></i>' + wsName + '</strong>';
+        html += '<div class="d-flex align-items-center gap-2">';
+        html += '<div class="progress" style="width:120px;height:8px;">';
+        html += '<div class="progress-bar" style="width:' + wsPct + '%;background:' + barColor + ';"></div></div>';
+        html += '<small style="font-weight:600;color:' + barColor + ';">' + wsPct + '%</small>';
+        html += '</div></div>';
+        html += '<div class="card-body p-0"><div class="table-responsive"><table class="table table-hover mb-0">';
+        html += '<thead><tr><th>Description</th><th>Owner</th><th>Target Date</th><th>Status</th></tr></thead><tbody>';
+
+        items.forEach(function(item) {
+            var isOverdue = item.target_date && item.target_date < new Date().toISOString().split('T')[0] && item.status !== 'ready';
+            html += '<tr' + (isOverdue ? ' class="table-danger"' : '') + '>';
+            html += '<td>' + (item.description || item.title || '--') + '</td>';
+            html += '<td>' + (item.owner || '--') + '</td>';
+            html += '<td><small' + (isOverdue ? ' class="text-danger fw-bold"' : '') + '>' + (item.target_date || '--') + '</small></td>';
+            html += '<td>' + getStatusBadge(item.status) + '</td>';
+            html += '</tr>';
+        });
+
+        html += '</tbody></table></div></div></div>';
+    });
+
+    container.innerHTML = html;
+}
+</script>
 {% endblock %}

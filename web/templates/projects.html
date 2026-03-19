@@ -1,15 +1,245 @@
 {% extends "base.html" %}
-{% block title %}projects - {{ app_name }}{% endblock %}
-{% block page_title %}projects{% endblock %}
+{% block title %}Tasks & Projects - {{ app_name }}{% endblock %}
+{% block page_title %}Tasks & Projects{% endblock %}
+{% block extra_css %}
+<style>
+.kanban-col { min-height: 400px; }
+.kanban-card {
+    padding: 0.75rem;
+    border-radius: 8px;
+    background: var(--pt-bg-surface);
+    border: 1px solid var(--pt-border-default);
+    margin-bottom: 0.5rem;
+    cursor: default;
+    transition: box-shadow 0.15s;
+}
+.kanban-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+.priority-critical { border-left: 3px solid #dc3545; }
+.priority-high { border-left: 3px solid #fd7e14; }
+.priority-medium { border-left: 3px solid #ffc107; }
+.priority-low { border-left: 3px solid #198754; }
+</style>
+{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-4">
+<div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h2><i class="bi bi-kanban me-2"></i>projects</h2>
-        <p class="text-muted">This module is under construction.</p>
+        <h2><i class="bi bi-kanban me-2"></i>Tasks & Projects</h2>
+        <p class="text-muted mb-0">Manage tasks across all workstreams</p>
+    </div>
+    <div class="d-flex gap-2">
+        <select id="programSelect" class="form-select form-select-sm" style="min-width:220px;" onchange="loadTasks()">
+            <option value="">Select program...</option>
+            {% for p in programs %}
+            <option value="{{ p.id }}">{{ p.name }}</option>
+            {% endfor %}
+        </select>
+        <select id="wsFilter" class="form-select form-select-sm" style="min-width:160px;" onchange="loadTasks()">
+            <option value="">All Workstreams</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="showAddTask()"><i class="bi bi-plus-lg me-1"></i>Add Task</button>
     </div>
 </div>
-<div class="cfi-demo-banner">
-    <i class="bi bi-info-circle"></i>
-    This page will be built in the next phase. <a href="/dashboard">Return to Dashboard</a>.
+
+<!-- View Toggle -->
+<ul class="nav nav-tabs mb-3" id="viewTabs">
+    <li class="nav-item"><a class="nav-link active" href="#" onclick="switchView('kanban');return false;"><i class="bi bi-kanban me-1"></i>Kanban</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchView('list');return false;"><i class="bi bi-list-ul me-1"></i>List</a></li>
+</ul>
+
+<!-- Kanban View -->
+<div id="kanbanView">
+    <div class="row g-3">
+        <div class="col-md-3">
+            <h6 class="text-muted mb-2"><i class="bi bi-circle me-1"></i>Not Started <span class="badge bg-secondary" id="countNotStarted">0</span></h6>
+            <div class="kanban-col" id="colNotStarted"></div>
+        </div>
+        <div class="col-md-3">
+            <h6 class="text-info mb-2"><i class="bi bi-play-circle me-1"></i>In Progress <span class="badge bg-info" id="countInProgress">0</span></h6>
+            <div class="kanban-col" id="colInProgress"></div>
+        </div>
+        <div class="col-md-3">
+            <h6 class="text-warning mb-2"><i class="bi bi-exclamation-circle me-1"></i>Blocked / Review <span class="badge bg-warning text-dark" id="countBlocked">0</span></h6>
+            <div class="kanban-col" id="colBlocked"></div>
+        </div>
+        <div class="col-md-3">
+            <h6 class="text-success mb-2"><i class="bi bi-check-circle me-1"></i>Complete <span class="badge bg-success" id="countComplete">0</span></h6>
+            <div class="kanban-col" id="colComplete"></div>
+        </div>
+    </div>
 </div>
+
+<!-- List View -->
+<div id="listView" class="d-none">
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead><tr><th>Task</th><th>Workstream</th><th>Assignee</th><th>Priority</th><th>Status</th><th>Due Date</th><th>Hours</th></tr></thead>
+                    <tbody id="taskTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Task Modal -->
+<div class="modal fade" id="addTaskModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Add Task</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label">Title *</label><input type="text" class="form-control" id="taskTitle"></div>
+                <div class="row g-3">
+                    <div class="col-md-6"><label class="form-label">Workstream</label><select class="form-select" id="taskWorkstream"></select></div>
+                    <div class="col-md-6"><label class="form-label">Priority</label>
+                        <select class="form-select" id="taskPriority">
+                            <option value="critical">Critical</option><option value="high">High</option>
+                            <option value="medium" selected>Medium</option><option value="low">Low</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6"><label class="form-label">Assignee</label><input type="text" class="form-control" id="taskAssignee"></div>
+                    <div class="col-md-6"><label class="form-label">Type</label>
+                        <select class="form-select" id="taskAssigneeType">
+                            <option value="internal">Internal</option><option value="client">Client</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6"><label class="form-label">Start Date</label><input type="date" class="form-control" id="taskStart"></div>
+                    <div class="col-md-6"><label class="form-label">Due Date</label><input type="date" class="form-control" id="taskDue"></div>
+                    <div class="col-md-6"><label class="form-label">Estimated Hours</label><input type="number" class="form-control" id="taskHours"></div>
+                </div>
+                <div class="mt-3"><label class="form-label">Description</label><textarea class="form-control" id="taskDesc" rows="2"></textarea></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="createTask()">Create Task</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var allTasks = [];
+var workstreams = {};
+
+function switchView(view) {
+    document.getElementById('kanbanView').classList.toggle('d-none', view !== 'kanban');
+    document.getElementById('listView').classList.toggle('d-none', view !== 'list');
+    document.querySelectorAll('#viewTabs .nav-link').forEach(function(el) { el.classList.remove('active'); });
+    event.target.closest('.nav-link').classList.add('active');
+}
+
+async function loadTasks() {
+    var pid = document.getElementById('programSelect').value;
+    if (!pid) return;
+
+    // Load workstreams
+    var wsData = await apiCall('/api/programs/' + pid + '/workstreams');
+    workstreams = {};
+    var wsSelect = document.getElementById('wsFilter');
+    var taskWsSelect = document.getElementById('taskWorkstream');
+    wsSelect.innerHTML = '<option value="">All Workstreams</option>';
+    taskWsSelect.innerHTML = '<option value="">None</option>';
+    (wsData.workstreams || []).forEach(function(ws) {
+        workstreams[ws.id] = ws.name;
+        wsSelect.innerHTML += '<option value="' + ws.id + '">' + ws.name + '</option>';
+        taskWsSelect.innerHTML += '<option value="' + ws.id + '">' + ws.name + '</option>';
+    });
+
+    // Load tasks
+    var wsFilter = document.getElementById('wsFilter').value;
+    var url = '/api/programs/' + pid + '/tasks';
+    if (wsFilter) url += '?workstream_id=' + wsFilter;
+    var data = await apiCall(url);
+    allTasks = data.tasks || [];
+    renderKanban();
+    renderList();
+}
+
+function renderKanban() {
+    var cols = {not_started: [], in_progress: [], blocked: [], complete: []};
+    allTasks.forEach(function(t) {
+        if (t.status === 'complete') cols.complete.push(t);
+        else if (t.status === 'blocked' || t.status === 'review') cols.blocked.push(t);
+        else if (t.status === 'in_progress') cols.in_progress.push(t);
+        else cols.not_started.push(t);
+    });
+
+    ['not_started', 'in_progress', 'blocked', 'complete'].forEach(function(status, i) {
+        var colIds = ['colNotStarted', 'colInProgress', 'colBlocked', 'colComplete'];
+        var countIds = ['countNotStarted', 'countInProgress', 'countBlocked', 'countComplete'];
+        var col = document.getElementById(colIds[i]);
+        document.getElementById(countIds[i]).textContent = cols[status].length;
+        col.innerHTML = cols[status].map(function(t) {
+            var wsName = workstreams[t.workstream_id] || '';
+            var prioClass = 'priority-' + t.priority;
+            var prioColor = t.priority === 'critical' ? '#dc3545' : t.priority === 'high' ? '#fd7e14' : t.priority === 'medium' ? '#ffc107' : '#198754';
+            var assigneeBadge = t.assignee_type === 'client' ? '<span class="badge bg-info" style="font-size:0.6rem;">Client</span>' : '';
+            return '<div class="kanban-card ' + prioClass + '" onclick="quickUpdateTask(\'' + t.id + '\')">' +
+                '<div class="d-flex justify-content-between mb-1"><strong style="font-size:0.8rem;">' + t.title + '</strong></div>' +
+                '<div class="d-flex justify-content-between align-items-center">' +
+                '<small class="text-muted">' + wsName + '</small>' +
+                '<small style="color:' + prioColor + ';font-weight:600;text-transform:uppercase;font-size:0.65rem;">' + t.priority + '</small></div>' +
+                (t.assignee_name ? '<div class="mt-1"><small><i class="bi bi-person me-1"></i>' + t.assignee_name + ' ' + assigneeBadge + '</small></div>' : '') +
+                (t.due_date ? '<div><small class="text-muted"><i class="bi bi-calendar me-1"></i>' + t.due_date + '</small></div>' : '') +
+                '</div>';
+        }).join('');
+    });
+}
+
+function renderList() {
+    var tbody = document.getElementById('taskTableBody');
+    tbody.innerHTML = allTasks.map(function(t) {
+        var wsName = workstreams[t.workstream_id] || '--';
+        var prioColor = t.priority === 'critical' ? 'bg-danger' : t.priority === 'high' ? 'bg-warning text-dark' : t.priority === 'medium' ? 'bg-secondary' : 'bg-success';
+        var statusColor = t.status === 'complete' ? 'bg-success' : t.status === 'in_progress' ? 'bg-info' : t.status === 'blocked' ? 'bg-danger' : 'bg-secondary';
+        return '<tr onclick="quickUpdateTask(\'' + t.id + '\')" style="cursor:pointer;">' +
+            '<td><strong>' + t.title + '</strong></td>' +
+            '<td><small>' + wsName + '</small></td>' +
+            '<td>' + (t.assignee_name || '--') + (t.assignee_type === 'client' ? ' <span class="badge bg-info" style="font-size:0.55rem;">Client</span>' : '') + '</td>' +
+            '<td><span class="badge ' + prioColor + '">' + t.priority + '</span></td>' +
+            '<td><span class="badge ' + statusColor + '">' + t.status.replace('_', ' ') + '</span></td>' +
+            '<td>' + (t.due_date || '--') + '</td>' +
+            '<td>' + (t.estimated_hours || '--') + 'h</td></tr>';
+    }).join('');
+}
+
+async function quickUpdateTask(taskId) {
+    var task = allTasks.find(function(t) { return t.id === taskId; });
+    if (!task) return;
+    var statuses = ['not_started', 'in_progress', 'review', 'blocked', 'complete'];
+    var currentIdx = statuses.indexOf(task.status);
+    var nextStatus = statuses[(currentIdx + 1) % statuses.length];
+    var confirm = window.confirm('Move "' + task.title + '" to ' + nextStatus.replace('_', ' ') + '?');
+    if (!confirm) return;
+    await apiCall('/api/tasks/' + taskId, 'PUT', {status: nextStatus});
+    loadTasks();
+}
+
+function showAddTask() {
+    if (!document.getElementById('programSelect').value) { alert('Select a program first.'); return; }
+    new bootstrap.Modal(document.getElementById('addTaskModal')).show();
+}
+
+async function createTask() {
+    var pid = document.getElementById('programSelect').value;
+    var data = {
+        title: document.getElementById('taskTitle').value,
+        workstream_id: document.getElementById('taskWorkstream').value || null,
+        priority: document.getElementById('taskPriority').value,
+        assignee_name: document.getElementById('taskAssignee').value,
+        assignee_type: document.getElementById('taskAssigneeType').value,
+        start_date: document.getElementById('taskStart').value || null,
+        due_date: document.getElementById('taskDue').value || null,
+        estimated_hours: parseFloat(document.getElementById('taskHours').value) || null,
+        description: document.getElementById('taskDesc').value,
+    };
+    if (!data.title) { alert('Title is required'); return; }
+    await apiCall('/api/programs/' + pid + '/tasks', 'POST', data);
+    bootstrap.Modal.getInstance(document.getElementById('addTaskModal')).hide();
+    document.getElementById('taskTitle').value = '';
+    loadTasks();
+}
+</script>
 {% endblock %}

@@ -1,15 +1,270 @@
 {% extends "base.html" %}
-{% block title %}reporting - {{ app_name }}{% endblock %}
-{% block page_title %}reporting{% endblock %}
+{% block title %}Executive Reporting - {{ app_name }}{% endblock %}
+{% block page_title %}Executive Reporting{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-4">
+<div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h2><i class="bi bi-kanban me-2"></i>reporting</h2>
-        <p class="text-muted">This module is under construction.</p>
+        <h2><i class="bi bi-file-earmark-bar-graph me-2"></i>Executive Reporting</h2>
+        <p class="text-muted mb-0">Generate AI-powered status, risk, and readiness reports</p>
+    </div>
+    <select id="programSelect" class="form-select form-select-sm" style="min-width:240px;" onchange="loadData()">
+        <option value="">Select program...</option>
+        {% for p in programs %}
+        <option value="{{ p.id }}">{{ p.name }}</option>
+        {% endfor %}
+    </select>
+</div>
+
+<!-- Report Generation -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-clipboard-data" style="font-size:2.5rem;color:#0d6efd;"></i>
+                <h5 class="mt-2 mb-1">Status Report</h5>
+                <p class="text-muted small mb-3">Overall program status with key metrics, milestones, and highlights</p>
+                <button class="btn btn-primary btn-sm" id="btnStatusReport" onclick="generateReport('status_report')">
+                    <i class="bi bi-lightning me-1"></i>Generate Status Report
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-shield-exclamation" style="font-size:2.5rem;color:#dc3545;"></i>
+                <h5 class="mt-2 mb-1">Risk Report</h5>
+                <p class="text-muted small mb-3">Comprehensive risk analysis with mitigation strategies and exposure</p>
+                <button class="btn btn-danger btn-sm" id="btnRiskReport" onclick="generateReport('risk_analysis')">
+                    <i class="bi bi-lightning me-1"></i>Generate Risk Report
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-clipboard-check" style="font-size:2.5rem;color:#198754;"></i>
+                <h5 class="mt-2 mb-1">Readiness Report</h5>
+                <p class="text-muted small mb-3">Day 1 and Exit readiness assessment with gap analysis</p>
+                <button class="btn btn-success btn-sm" id="btnReadinessReport" onclick="generateReport('readiness_assessment')">
+                    <i class="bi bi-lightning me-1"></i>Generate Readiness Report
+                </button>
+            </div>
+        </div>
     </div>
 </div>
-<div class="cfi-demo-banner">
-    <i class="bi bi-info-circle"></i>
-    This page will be built in the next phase. <a href="/dashboard">Return to Dashboard</a>.
+
+<!-- Generated Report Display -->
+<div class="card mb-4" id="reportCard" style="display:none;">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-file-text me-1"></i><span id="reportTitle">Report</span></strong>
+        <small class="text-muted" id="reportMeta"></small>
+    </div>
+    <div class="card-body" id="reportBody">
+    </div>
 </div>
+
+<!-- Spinner -->
+<div class="text-center py-5" id="reportSpinner" style="display:none;">
+    <div class="spinner-border text-primary" role="status"></div>
+    <p class="text-muted mt-2">Generating report with AI analysis...</p>
+</div>
+
+<!-- Past Reports -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-clock-history me-1"></i>Past Reports</strong>
+        <div class="d-flex gap-2">
+            <select id="reportTypeFilter" class="form-select form-select-sm" style="width:auto;" onchange="loadPastReports()">
+                <option value="status_report">Status Reports</option>
+                <option value="risk_analysis">Risk Reports</option>
+                <option value="readiness_assessment">Readiness Reports</option>
+            </select>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Report Type</th>
+                        <th>Generated</th>
+                        <th>Score</th>
+                        <th>Grade</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="pastReportsBody">
+                    <tr><td colspan="5" class="text-center text-muted py-4">Select a program to view past reports</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var pastReports = [];
+
+async function loadData() {
+    var pid = document.getElementById('programSelect').value;
+    if (!pid) return;
+    document.getElementById('reportCard').style.display = 'none';
+    await loadPastReports();
+}
+
+async function loadPastReports() {
+    var pid = document.getElementById('programSelect').value;
+    if (!pid) return;
+    var reportType = document.getElementById('reportTypeFilter').value;
+    try {
+        var data = await apiCall('/api/programs/' + pid + '/analyses?type=' + reportType);
+        pastReports = data.analyses || [];
+        renderPastReports();
+    } catch(err) {
+        console.error('Failed to load past reports:', err);
+        document.getElementById('pastReportsBody').innerHTML =
+            '<tr><td colspan="5" class="text-center text-muted py-4">Failed to load past reports</td></tr>';
+    }
+}
+
+function getTypeLabel(type) {
+    var labels = {
+        status_report: 'Status Report',
+        risk_analysis: 'Risk Analysis',
+        readiness_assessment: 'Readiness Assessment'
+    };
+    return labels[type] || type;
+}
+
+function getTypeBadge(type) {
+    var styles = {
+        status_report: 'background:#0d6efd;',
+        risk_analysis: 'background:#dc3545;',
+        readiness_assessment: 'background:#198754;'
+    };
+    return '<span class="badge" style="' + (styles[type] || 'background:#6c757d;') + '">' + getTypeLabel(type) + '</span>';
+}
+
+function renderPastReports() {
+    var tbody = document.getElementById('pastReportsBody');
+    if (!pastReports.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No past reports found</td></tr>';
+        return;
+    }
+    tbody.innerHTML = pastReports.map(function(r) {
+        var dt = r.created_at ? new Date(r.created_at) : null;
+        var dateStr = dt ? dt.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) + ' ' +
+            dt.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'}) : '--';
+        var score = r.overall_score || 0;
+        var scoreColor = score >= 75 ? '#198754' : score >= 50 ? '#ffc107' : '#dc3545';
+        return '<tr>' +
+            '<td>' + getTypeBadge(r.analysis_type || r.type) + '</td>' +
+            '<td><small>' + dateStr + '</small></td>' +
+            '<td><strong style="color:' + scoreColor + ';">' + Math.round(score) + '/100</strong></td>' +
+            '<td><span class="badge" style="background:' + scoreColor + ';">' + (r.grade || '--') + '</span></td>' +
+            '<td><button class="btn btn-outline-primary btn-sm" onclick="viewReport(\'' + r.id + '\')"><i class="bi bi-eye me-1"></i>View</button></td>' +
+            '</tr>';
+    }).join('');
+}
+
+async function viewReport(reportId) {
+    try {
+        var resp = await fetch('/api/analyses/' + reportId);
+        var data = await resp.json();
+        if (data.results) {
+            showAnalysisDetail(data.results, data.analysis_type);
+        }
+    } catch(err) {
+        console.error('Could not load report:', err);
+        alert('Failed to load report details.');
+    }
+}
+
+async function generateReport(analysisType) {
+    var pid = document.getElementById('programSelect').value;
+    if (!pid) { alert('Select a program first.'); return; }
+
+    // Show spinner, hide previous report
+    document.getElementById('reportSpinner').style.display = '';
+    document.getElementById('reportCard').style.display = 'none';
+
+    // Disable buttons
+    var btns = ['btnStatusReport', 'btnRiskReport', 'btnReadinessReport'];
+    btns.forEach(function(id) { document.getElementById(id).disabled = true; });
+
+    try {
+        var data = await apiCall('/api/programs/' + pid + '/analyze', 'POST', {
+            analysis_type: analysisType
+        });
+
+        document.getElementById('reportSpinner').style.display = 'none';
+        var results = data.results || data;
+
+        // Show the generated report in the card
+        document.getElementById('reportTitle').textContent = getTypeLabel(analysisType) + ' Results';
+        document.getElementById('reportMeta').textContent = 'Generated: ' + new Date().toLocaleString();
+
+        var html = '';
+
+        // Overall score if present
+        if (results.overall_score !== undefined) {
+            var score = results.overall_score;
+            var scoreColor = score >= 75 ? '#198754' : score >= 50 ? '#ffc107' : '#dc3545';
+            html += '<div class="d-flex align-items-center gap-3 mb-3">';
+            html += '<div style="width:70px;height:70px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:700;background:' + scoreColor + '20;color:' + scoreColor + ';">' + Math.round(score) + '</div>';
+            html += '<div><h5 class="mb-0">' + getTypeLabel(analysisType) + '</h5>';
+            if (results.grade) html += '<span class="badge" style="background:' + scoreColor + ';">' + results.grade + '</span>';
+            html += '</div></div>';
+        }
+
+        // Summary/Executive Summary
+        if (results.summary || results.executive_summary) {
+            html += '<div class="mb-3"><h6><i class="bi bi-card-text me-1"></i>Executive Summary</h6>';
+            html += '<p>' + (results.summary || results.executive_summary) + '</p></div>';
+        }
+
+        // Insights
+        if (results.insights && results.insights.length) {
+            html += '<div class="mb-3"><h6><i class="bi bi-lightbulb me-1"></i>Key Insights</h6>';
+            results.insights.forEach(function(insight) {
+                html += '<div class="cfi-detail-insight mb-1"><i class="bi bi-arrow-right-circle me-2 text-info"></i>' + insight + '</div>';
+            });
+            html += '</div>';
+        }
+
+        // Recommendations
+        if (results.recommendations && results.recommendations.length) {
+            html += '<div class="mb-3"><h6><i class="bi bi-check2-square me-1"></i>Recommendations</h6>';
+            results.recommendations.forEach(function(rec) {
+                var p = (rec.priority || 'medium').toLowerCase();
+                var pClass = p === 'high' ? 'high' : p === 'medium' ? 'medium' : 'low';
+                html += '<div class="cfi-detail-rec ' + pClass + '">';
+                html += '<strong>' + (rec.title || rec) + '</strong>';
+                if (rec.detail) html += '<div style="font-size:0.85rem;">' + rec.detail + '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        // Fallback: render raw text
+        if (!html) {
+            html = '<pre style="white-space:pre-wrap;">' + JSON.stringify(results, null, 2) + '</pre>';
+        }
+
+        document.getElementById('reportBody').innerHTML = html;
+        document.getElementById('reportCard').style.display = '';
+
+        // Refresh past reports
+        await loadPastReports();
+    } catch(err) {
+        document.getElementById('reportSpinner').style.display = 'none';
+        alert('Error generating report: ' + err.message);
+    } finally {
+        btns.forEach(function(id) { document.getElementById(id).disabled = false; });
+    }
+}
+</script>
 {% endblock %}
