@@ -15,7 +15,3 @@ services:
           property: connectionString
       - key: ANTHROPIC_API_KEY
         sync: false
-
-databases:
-  - name: separation-pmo-db
-    plan: free
