@@ -81,6 +81,7 @@
 <script>
 var currentCategory = 'day1';
 var allItems = [];
+var wsNames = {};
 
 function switchCategory(cat) {
     currentCategory = cat;
@@ -93,6 +94,12 @@ function switchCategory(cat) {
 async function loadData() {
     var pid = document.getElementById('programSelect').value;
     if (!pid) return;
+    // Load workstream names for grouping
+    try {
+        var wsData = await apiCall('/api/programs/' + pid + '/workstreams');
+        wsNames = {};
+        (wsData.workstreams || []).forEach(function(w) { wsNames[w.id] = w.name; });
+    } catch(e) {}
     await loadReadiness(pid, currentCategory);
 }
 
@@ -145,10 +152,10 @@ function renderChecklist() {
         return;
     }
 
-    // Group by workstream
+    // Group by workstream — resolve workstream_id to name
     var groups = {};
     allItems.forEach(function(item) {
-        var ws = item.workstream || 'General';
+        var ws = wsNames[item.workstream_id] || 'General';
         if (!groups[ws]) groups[ws] = [];
         groups[ws].push(item);
     });
@@ -175,8 +182,8 @@ function renderChecklist() {
         items.forEach(function(item) {
             var isOverdue = item.target_date && item.target_date < new Date().toISOString().split('T')[0] && item.status !== 'ready';
             html += '<tr' + (isOverdue ? ' class="table-danger"' : '') + '>';
-            html += '<td>' + (item.description || item.title || '--') + '</td>';
-            html += '<td>' + (item.owner || '--') + '</td>';
+            html += '<td>' + (item.item_description || item.description || '--') + '</td>';
+            html += '<td>' + (item.owner_name || item.owner || '--') + '</td>';
             html += '<td><small' + (isOverdue ? ' class="text-danger fw-bold"' : '') + '>' + (item.target_date || '--') + '</small></td>';
             html += '<td>' + getStatusBadge(item.status) + '</td>';
             html += '</tr>';

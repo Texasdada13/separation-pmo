@@ -203,6 +203,7 @@ var filteredEntries = [];
 var workstreamChart = null;
 var weeklyTrendChart = null;
 var activityPieChart = null;
+var wsNames = {};
 
 function switchView(view) {
     ['detailedView','summaryView','utilizationView','activityView'].forEach(function(id) {
@@ -218,6 +219,12 @@ function switchView(view) {
 async function loadData() {
     var pid = document.getElementById('programSelect').value;
     if (!pid) return;
+    // Load workstream names
+    try {
+        var wsData = await apiCall('/api/programs/' + pid + '/workstreams');
+        wsNames = {};
+        (wsData.workstreams || []).forEach(function(w) { wsNames[w.id] = w.name; });
+    } catch(e) {}
     await loadTimeEntries(pid);
 }
 
@@ -258,8 +265,9 @@ function renderCards() {
     monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
     monday.setHours(0, 0, 0, 0);
     var weekHrs = filteredEntries.filter(function(e) {
-        if (!e.date) return false;
-        var d = new Date(e.date);
+        var dt = e.entry_date || e.date;
+        if (!dt) return false;
+        var d = new Date(dt);
         return d >= monday;
     }).reduce(function(s, e) { return s + (parseFloat(e.hours) || 0); }, 0);
 
@@ -292,15 +300,15 @@ function renderDetailedTable() {
     }
     // Sort by date descending
     var sorted = filteredEntries.slice().sort(function(a, b) {
-        return (b.date || '').localeCompare(a.date || '');
+        return (b.entry_date || b.date || '').localeCompare(a.entry_date || a.date || '');
     });
     tbody.innerHTML = sorted.map(function(e) {
         return '<tr>' +
-            '<td>' + (e.date || '--') + '</td>' +
-            '<td><strong>' + (e.person_name || e.person || '--') + '</strong></td>' +
+            '<td>' + (e.entry_date || e.date || '--') + '</td>' +
+            '<td><strong>' + (e.person_name || '--') + '</strong></td>' +
             '<td>' + getTypeBadge(e.person_type) + '</td>' +
-            '<td><small>' + (e.workstream || '--') + '</small></td>' +
-            '<td><small>' + (e.activity || e.activity_category || '--') + '</small></td>' +
+            '<td><small>' + (wsNames[e.workstream_id] || e.workstream || '--') + '</small></td>' +
+            '<td><small>' + (e.activity_category || '--') + '</small></td>' +
             '<td><strong>' + (parseFloat(e.hours) || 0).toFixed(1) + 'h</strong></td>' +
             '<td><small class="text-muted">' + (e.description || '--') + '</small></td>' +
             '<td>' + getStatusBadge(e.status) + '</td>' +
@@ -317,7 +325,7 @@ function renderWorkstreamChart() {
     // Aggregate hours by workstream
     var byWS = {};
     filteredEntries.forEach(function(e) {
-        var ws = e.workstream || 'Unassigned';
+        var ws = wsNames[e.workstream_id] || e.workstream || 'Unassigned';
         byWS[ws] = (byWS[ws] || 0) + (parseFloat(e.hours) || 0);
     });
 
