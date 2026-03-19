@@ -11,6 +11,16 @@ import time
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, PROJECT_ROOT)
 
+# Load .env file if present
+_env_path = os.path.join(PROJECT_ROOT, '.env')
+if os.path.exists(_env_path):
+    with open(_env_path) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith('#') and '=' in _line:
+                _key, _val = _line.split('=', 1)
+                os.environ.setdefault(_key.strip(), _val.strip())
+
 
 def find_free_port(start=5200, end=5299):
     """Find a free port in the given range."""
