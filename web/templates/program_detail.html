@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}{{ program.name }} - {{ app_name }}{% endblock %}
+{% block page_title %}Program{% endblock %}
+{% block content %}
+<!-- Header -->
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/dashboard">Dashboard</a></li>
+            <li class="breadcrumb-item active">{{ program.name }}</li>
+        </ol></nav>
+        <h2>{{ program.name }}</h2>
+        <p class="text-muted mb-0">{{ program.program_type | title }} | {{ program.status | title }}{% if program.seller_name %} | {{ program.seller_name }} → {{ program.buyer_name }}{% endif %}</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/projects" class="btn btn-primary"><i class="bi bi-kanban me-2"></i>Tasks</a>
+        <a href="/raid" class="btn btn-outline-warning"><i class="bi bi-exclamation-diamond me-2"></i>RAID</a>
+        <a href="/chat" class="btn btn-outline-secondary"><i class="bi bi-robot me-2"></i>AI Advisor</a>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-2">
+        <div class="card metric-card">
+            <div class="metric-value {{ 'score-excellent' if program.overall_health_score and program.overall_health_score >= 80 else 'score-good' if program.overall_health_score and program.overall_health_score >= 70 else 'score-fair' if program.overall_health_score and program.overall_health_score >= 60 else 'score-poor' }}">
+                {{ "%.0f"|format(program.overall_health_score) if program.overall_health_score else '--' }}
+            </div>
+            <div class="metric-label cfi-tip" data-bs-toggle="tooltip" title="Overall program health score">Health Score</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-2"><div class="card metric-card" id="taskPctCard"><div class="metric-value" style="color:#198754;">--</div><div class="metric-label">Tasks Complete</div></div></div>
+    <div class="col-6 col-md-2"><div class="card metric-card" id="milestonePctCard"><div class="metric-value" style="color:#0dcaf0;">--</div><div class="metric-label">Milestones Hit</div></div></div>
+    <div class="col-6 col-md-2"><div class="card metric-card" id="riskCard"><div class="metric-value" style="color:#dc3545;">--</div><div class="metric-label">Open Risks</div></div></div>
+    <div class="col-6 col-md-2"><div class="card metric-card" id="tsaCard"><div class="metric-value" style="color:#ffc107;">--</div><div class="metric-label">Active TSAs</div></div></div>
+    <div class="col-6 col-md-2"><div class="card metric-card"><div class="metric-value" style="color:#20c997;">{{ program.status | title }}</div><div class="metric-label">Phase</div></div></div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <!-- Workstream Status -->
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-diagram-3 me-2 text-info"></i>Workstream Status</h5></div>
+            <div class="card-body">
+                {% for ws in workstreams %}
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <div><strong>{{ ws.name }}</strong>{% if ws.lead_name %}<small class="text-muted ms-2">{{ ws.lead_name }}</small>{% endif %}</div>
+                        <div>
+                            <span class="badge {{ 'bg-success' if ws.status == 'on_track' else 'bg-warning text-dark' if ws.status == 'at_risk' else 'bg-danger' if ws.status == 'behind' else 'bg-info' }}">{{ ws.status | replace('_', ' ') | title }}</span>
+                            <small class="text-muted ms-2">{{ ws.percent_complete|int }}%</small>
+                        </div>
+                    </div>
+                    <div class="progress" style="height:6px;"><div class="progress-bar {{ 'bg-success' if ws.status == 'on_track' else 'bg-warning' if ws.status == 'at_risk' else 'bg-danger' }}" style="width:{{ ws.percent_complete }}%"></div></div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Milestones -->
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-flag me-2 text-warning"></i>Milestones</h5></div>
+            <div class="card-body p-0">
+                <div class="table-responsive"><table class="table table-hover mb-0">
+                    <thead><tr><th>Milestone</th><th>Type</th><th>Target</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for ms in milestones %}
+                        <tr>
+                            <td><strong>{{ ms.title }}</strong>{% if ms.is_critical_path %} <i class="bi bi-exclamation-circle-fill text-danger" style="font-size:0.75rem;" data-bs-toggle="tooltip" title="Critical Path"></i>{% endif %}</td>
+                            <td><span class="badge bg-secondary">{{ ms.milestone_type }}</span></td>
+                            <td>{{ ms.target_date.strftime('%b %d, %Y') if ms.target_date else '--' }}</td>
+                            <td><span class="badge {{ 'bg-success' if ms.status == 'complete' else 'bg-info' if ms.status == 'on_track' else 'bg-warning text-dark' if ms.status in ['upcoming','at_risk'] else 'bg-danger' }}">{{ ms.status | replace('_',' ') | title }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table></div>
+            </div>
+        </div>
+
+        {% if analyses %}
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-robot me-2 text-success"></i>AI Analyses</h5></div>
+            <div class="card-body">
+                <div class="row g-2">
+                    {% for a in analyses %}
+                    <div class="col-md-4">
+                        <div class="cfi-history-item d-flex justify-content-between align-items-center" style="cursor:pointer;" onclick="fetchAndShowAnalysis('{{ a.id }}')">
+                            <div><strong style="font-size:0.8rem;text-transform:capitalize;">{{ a.analysis_type.replace('_',' ') }}</strong><div class="cfi-history-date">{{ a.created_at.strftime('%b %d') if a.created_at else '' }}</div></div>
+                            <div class="cfi-history-score" style="color:{{ '#198754' if a.overall_score and a.overall_score >= 75 else '#ffc107' if a.overall_score and a.overall_score >= 50 else '#dc3545' }};">{{ "%.0f"|format(a.overall_score) if a.overall_score else '--' }}</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-info-circle me-2"></i>Program Details</div>
+            <div class="card-body">
+                {% if program.deal_value %}<div class="d-flex justify-content-between mb-2"><span class="text-muted">Deal Value</span><strong>${{ "{:,.0f}".format(program.deal_value / 1e6) }}M</strong></div>{% endif %}
+                {% if program.start_date %}<div class="d-flex justify-content-between mb-2"><span class="text-muted">Start</span><strong>{{ program.start_date.strftime('%b %d, %Y') }}</strong></div>{% endif %}
+                {% if program.day1_date %}<div class="d-flex justify-content-between mb-2"><span class="text-muted">Day 1</span><strong>{{ program.day1_date.strftime('%b %d, %Y') }}</strong></div>{% endif %}
+                {% if program.target_end_date %}<div class="d-flex justify-content-between mb-2"><span class="text-muted">Target End</span><strong>{{ program.target_end_date.strftime('%b %d, %Y') }}</strong></div>{% endif %}
+                {% if program.program_lead %}<div class="d-flex justify-content-between"><span class="text-muted">Lead</span><strong>{{ program.program_lead }}</strong></div>{% endif %}
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-lightning me-2"></i>AI Quick Actions</div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-success btn-sm" onclick="runAI('program_health')"><i class="bi bi-heart-pulse me-2"></i>Health Check</button>
+                    <button class="btn btn-outline-warning btn-sm" onclick="runAI('risk_analysis')"><i class="bi bi-shield-exclamation me-2"></i>Risk Analysis</button>
+                    <button class="btn btn-outline-info btn-sm" onclick="runAI('readiness_assessment')"><i class="bi bi-door-open me-2"></i>Readiness Check</button>
+                    <button class="btn btn-outline-primary btn-sm" onclick="runAI('status_report')"><i class="bi bi-file-earmark-text me-2"></i>Status Report</button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="runAI('tsa_risk')"><i class="bi bi-file-earmark-medical me-2"></i>TSA Risk Assessment</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><i class="bi bi-grid me-2"></i>Modules</div>
+            <div class="card-body"><div class="d-grid gap-2">
+                <a href="/tsa" class="btn btn-outline-primary btn-sm"><i class="bi bi-file-earmark-text me-2"></i>TSA Management</a>
+                <a href="/sla" class="btn btn-outline-primary btn-sm"><i class="bi bi-check2-square me-2"></i>SLA Compliance</a>
+                <a href="/readiness" class="btn btn-outline-primary btn-sm"><i class="bi bi-door-open me-2"></i>Exit Readiness</a>
+                <a href="/timesheet" class="btn btn-outline-primary btn-sm"><i class="bi bi-clock-history me-2"></i>Timesheets</a>
+                <a href="/governance" class="btn btn-outline-primary btn-sm"><i class="bi bi-building-gear me-2"></i>Governance</a>
+            </div></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var programId = '{{ program.id }}';
+fetch('/api/programs/' + programId + '/stats').then(function(r){return r.json();}).then(function(s){
+    document.querySelector('#taskPctCard .metric-value').textContent = s.task_completion_pct + '%';
+    document.querySelector('#milestonePctCard .metric-value').textContent = s.milestone_completion_pct + '%';
+    document.querySelector('#riskCard .metric-value').textContent = (s.open_risks + s.open_issues);
+    document.querySelector('#tsaCard .metric-value').textContent = s.active_tsas;
+});
+
+async function runAI(type) {
+    var btn = event.target.closest('button');
+    var orig = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>...';
+    try {
+        var res = await fetch('/api/programs/' + programId + '/analyze', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({analysis_type: type, inputs: {}})
+        });
+        var data = await res.json();
+        if (data.error) { alert('Error: ' + data.error); return; }
+        showAnalysisDetail(data.results, type);
+    } catch(e) { alert('Error: ' + e.message); }
+    finally { btn.disabled = false; btn.innerHTML = orig; }
+}
+</script>
+{% endblock %}
