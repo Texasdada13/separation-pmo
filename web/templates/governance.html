@@ -1,15 +1,288 @@
 {% extends "base.html" %}
-{% block title %}governance - {{ app_name }}{% endblock %}
-{% block page_title %}governance{% endblock %}
+{% block title %}Governance Center - {{ app_name }}{% endblock %}
+{% block page_title %}Governance Center{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-4">
+<div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h2><i class="bi bi-kanban me-2"></i>governance</h2>
-        <p class="text-muted">This module is under construction.</p>
+        <h2><i class="bi bi-building-gear me-2"></i>Governance Center</h2>
+        <p class="text-muted mb-0">Manage steering committees, meetings, and decisions</p>
+    </div>
+    <div class="d-flex gap-2">
+        <select id="programSelect" class="form-select form-select-sm" style="min-width:240px;" onchange="loadData()">
+            <option value="">Select program...</option>
+            {% for p in programs %}
+            <option value="{{ p.id }}">{{ p.name }}</option>
+            {% endfor %}
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="showScheduleMeeting()"><i class="bi bi-plus-lg me-1"></i>Schedule Meeting</button>
     </div>
 </div>
-<div class="cfi-demo-banner">
-    <i class="bi bi-info-circle"></i>
-    This page will be built in the next phase. <a href="/dashboard">Return to Dashboard</a>.
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="totalMeetings">--</div>
+            <div class="metric-label">Total Meetings</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="scheduledCount" style="color:#0d6efd;">--</div>
+            <div class="metric-label">Scheduled</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="completedCount" style="color:#198754;">--</div>
+            <div class="metric-label">Completed</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="decisionCount" style="color:#6f42c1;">--</div>
+            <div class="metric-label">Decisions Made</div>
+        </div>
+    </div>
 </div>
+
+<!-- Meetings Table -->
+<div class="card mb-4">
+    <div class="card-header">
+        <strong><i class="bi bi-calendar3 me-1"></i>Meetings</strong>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Type</th>
+                        <th>Date</th>
+                        <th>Duration</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="meetingsTableBody">
+                    <tr><td colspan="5" class="text-center text-muted py-4">Select a program to view meetings</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Decision Log -->
+<div class="card">
+    <div class="card-header">
+        <strong><i class="bi bi-signpost-2 me-1"></i>Decision Log</strong>
+    </div>
+    <div class="card-body" id="decisionLogBody">
+        <p class="text-muted mb-0">Select a program to view decisions from completed meetings.</p>
+    </div>
+</div>
+
+<!-- Schedule Meeting Modal -->
+<div class="modal fade" id="scheduleMeetingModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Schedule Meeting</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label">Title *</label><input type="text" class="form-control" id="meetingTitle"></div>
+                <div class="row g-3">
+                    <div class="col-md-6"><label class="form-label">Type</label>
+                        <select class="form-select" id="meetingType">
+                            <option value="steering_committee">Steering Committee</option>
+                            <option value="working_group">Working Group</option>
+                            <option value="executive_review">Executive Review</option>
+                            <option value="stand_up">Stand Up</option>
+                            <option value="workshop">Workshop</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6"><label class="form-label">Status</label>
+                        <select class="form-select" id="meetingStatus">
+                            <option value="scheduled">Scheduled</option>
+                            <option value="completed">Completed</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6"><label class="form-label">Date *</label><input type="datetime-local" class="form-control" id="meetingDate"></div>
+                    <div class="col-md-6"><label class="form-label">Duration (minutes)</label><input type="number" class="form-control" id="meetingDuration" value="60" min="15" step="15"></div>
+                </div>
+                <div class="mt-3"><label class="form-label">Agenda / Notes</label><textarea class="form-control" id="meetingNotes" rows="3"></textarea></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="createMeeting()">Schedule Meeting</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var allMeetings = [];
+
+async function loadData() {
+    var pid = document.getElementById('programSelect').value;
+    if (!pid) return;
+    await loadMeetings(pid);
+}
+
+async function loadMeetings(programId) {
+    try {
+        var data = await apiCall('/api/programs/' + programId + '/meetings');
+        allMeetings = data.meetings || [];
+        renderSummary();
+        renderMeetingsTable();
+        renderDecisionLog();
+    } catch(err) {
+        console.error('Failed to load meetings:', err);
+        document.getElementById('meetingsTableBody').innerHTML =
+            '<tr><td colspan="5" class="text-center text-muted py-4">Failed to load meetings</td></tr>';
+    }
+}
+
+function renderSummary() {
+    var total = allMeetings.length;
+    var scheduled = allMeetings.filter(function(m) { return m.status === 'scheduled'; }).length;
+    var completed = allMeetings.filter(function(m) { return m.status === 'completed'; }).length;
+    var decisions = 0;
+    allMeetings.forEach(function(m) {
+        if (m.decisions && Array.isArray(m.decisions)) decisions += m.decisions.length;
+    });
+
+    document.getElementById('totalMeetings').textContent = total;
+    document.getElementById('scheduledCount').textContent = scheduled;
+    document.getElementById('completedCount').textContent = completed;
+    document.getElementById('decisionCount').textContent = decisions;
+}
+
+function getTypeBadge(type) {
+    var styles = {
+        steering_committee: 'background:#6f42c120;color:#6f42c1;',
+        working_group: 'background:#0d6efd20;color:#0d6efd;',
+        executive_review: 'background:#dc354520;color:#dc3545;',
+        stand_up: 'background:#19875420;color:#198754;',
+        workshop: 'background:#fd7e1420;color:#fd7e14;',
+        other: 'background:#6c757d20;color:#6c757d;'
+    };
+    var labels = {
+        steering_committee: 'Steering Committee',
+        working_group: 'Working Group',
+        executive_review: 'Executive Review',
+        stand_up: 'Stand Up',
+        workshop: 'Workshop',
+        other: 'Other'
+    };
+    var style = styles[type] || styles.other;
+    return '<span class="badge" style="' + style + '">' + (labels[type] || type || 'Other') + '</span>';
+}
+
+function getStatusBadge(status) {
+    var styles = {
+        scheduled: 'background:#0d6efd;',
+        completed: 'background:#198754;',
+        cancelled: 'background:#6c757d;'
+    };
+    var labels = {
+        scheduled: 'Scheduled',
+        completed: 'Completed',
+        cancelled: 'Cancelled'
+    };
+    var style = styles[status] || 'background:#6c757d;';
+    return '<span class="badge" style="' + style + '">' + (labels[status] || status || 'Unknown') + '</span>';
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return '--';
+    var d = new Date(dateStr);
+    return d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) + ' ' +
+        d.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+}
+
+function renderMeetingsTable() {
+    var tbody = document.getElementById('meetingsTableBody');
+    if (!allMeetings.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No meetings found for this program</td></tr>';
+        return;
+    }
+    // Sort by date descending
+    var sorted = allMeetings.slice().sort(function(a, b) {
+        return new Date(b.date || b.meeting_date || 0) - new Date(a.date || a.meeting_date || 0);
+    });
+    tbody.innerHTML = sorted.map(function(m) {
+        var duration = m.duration ? m.duration + ' min' : '--';
+        return '<tr>' +
+            '<td><strong>' + (m.title || '--') + '</strong></td>' +
+            '<td>' + getTypeBadge(m.type || m.meeting_type) + '</td>' +
+            '<td><small>' + formatDate(m.date || m.meeting_date) + '</small></td>' +
+            '<td>' + duration + '</td>' +
+            '<td>' + getStatusBadge(m.status) + '</td>' +
+            '</tr>';
+    }).join('');
+}
+
+function renderDecisionLog() {
+    var container = document.getElementById('decisionLogBody');
+    var decisions = [];
+    allMeetings.forEach(function(m) {
+        if (m.decisions && Array.isArray(m.decisions)) {
+            m.decisions.forEach(function(d) {
+                decisions.push({
+                    decision: typeof d === 'string' ? d : (d.description || d.title || d.text || ''),
+                    meeting: m.title || 'Unknown Meeting',
+                    date: m.date || m.meeting_date || ''
+                });
+            });
+        }
+    });
+
+    if (!decisions.length) {
+        container.innerHTML = '<p class="text-muted mb-0">No decisions recorded yet.</p>';
+        return;
+    }
+
+    var html = '<div class="list-group list-group-flush">';
+    decisions.forEach(function(d) {
+        html += '<div class="list-group-item d-flex justify-content-between align-items-start">';
+        html += '<div><i class="bi bi-check-circle-fill text-success me-2"></i>' + d.decision + '';
+        html += '<br><small class="text-muted">From: ' + d.meeting + '</small></div>';
+        html += '<small class="text-muted text-nowrap">' + (d.date ? new Date(d.date).toLocaleDateString() : '') + '</small>';
+        html += '</div>';
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function showScheduleMeeting() {
+    if (!document.getElementById('programSelect').value) { alert('Select a program first.'); return; }
+    new bootstrap.Modal(document.getElementById('scheduleMeetingModal')).show();
+}
+
+async function createMeeting() {
+    var pid = document.getElementById('programSelect').value;
+    var payload = {
+        title: document.getElementById('meetingTitle').value,
+        type: document.getElementById('meetingType').value,
+        meeting_date: document.getElementById('meetingDate').value || null,
+        duration: parseInt(document.getElementById('meetingDuration').value) || 60,
+        status: document.getElementById('meetingStatus').value,
+        notes: document.getElementById('meetingNotes').value
+    };
+    if (!payload.title) { alert('Title is required'); return; }
+    try {
+        await apiCall('/api/programs/' + pid + '/meetings', 'POST', payload);
+        bootstrap.Modal.getInstance(document.getElementById('scheduleMeetingModal')).hide();
+        document.getElementById('meetingTitle').value = '';
+        document.getElementById('meetingDate').value = '';
+        document.getElementById('meetingDuration').value = '60';
+        document.getElementById('meetingNotes').value = '';
+        loadData();
+    } catch(err) {
+        alert('Error scheduling meeting: ' + err.message);
+    }
+}
+</script>
 {% endblock %}

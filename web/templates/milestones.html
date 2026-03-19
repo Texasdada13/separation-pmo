@@ -1,15 +1,351 @@
 {% extends "base.html" %}
-{% block title %}milestones - {{ app_name }}{% endblock %}
-{% block page_title %}milestones{% endblock %}
+{% block title %}Milestones - {{ app_name }}{% endblock %}
+{% block page_title %}Milestones{% endblock %}
+
+{% block extra_css %}
+<style>
+.timeline {
+    position: relative;
+    padding-left: 40px;
+}
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--border-color, #dee2e6);
+    border-radius: 2px;
+}
+.timeline-item {
+    position: relative;
+    margin-bottom: 1.5rem;
+}
+.timeline-dot {
+    position: absolute;
+    left: -33px;
+    top: 6px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 3px solid;
+    background: var(--card-bg, #fff);
+    z-index: 1;
+}
+.timeline-dot.completed { border-color: #198754; background: #198754; }
+.timeline-dot.in_progress { border-color: #0d6efd; background: #0d6efd; }
+.timeline-dot.at_risk { border-color: #ffc107; background: #ffc107; }
+.timeline-dot.not_started { border-color: #6c757d; background: transparent; }
+.timeline-dot.blocked { border-color: #dc3545; background: #dc3545; }
+.timeline-dot.missed { border-color: #dc3545; background: transparent; }
+.timeline-card {
+    border-left: 3px solid transparent;
+    transition: border-color 0.2s;
+}
+.timeline-card.critical-path {
+    border-left-color: #dc3545;
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-4">
+<div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h2><i class="bi bi-kanban me-2"></i>milestones</h2>
-        <p class="text-muted">This module is under construction.</p>
+        <h2><i class="bi bi-flag me-2"></i>Milestones</h2>
+        <p class="text-muted mb-0">Track key program milestones and critical path items</p>
+    </div>
+    <div class="d-flex gap-2">
+        <select id="programSelect" class="form-select form-select-sm" style="min-width:240px;" onchange="loadData()">
+            <option value="">Select program...</option>
+            {% for p in programs %}
+            <option value="{{ p.id }}">{{ p.name }}</option>
+            {% endfor %}
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="showAddMilestone()"><i class="bi bi-plus-lg me-1"></i>Add Milestone</button>
     </div>
 </div>
-<div class="cfi-demo-banner">
-    <i class="bi bi-info-circle"></i>
-    This page will be built in the next phase. <a href="/dashboard">Return to Dashboard</a>.
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="totalMilestones">--</div>
+            <div class="metric-label">Total</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="completedCount" style="color:#198754;">--</div>
+            <div class="metric-label">Completed</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="atRiskCount" style="color:#ffc107;">--</div>
+            <div class="metric-label">At Risk</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="upcomingCount" style="color:#0d6efd;">--</div>
+            <div class="metric-label">Upcoming</div>
+        </div>
+    </div>
 </div>
+
+<!-- Timeline -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-signpost-split me-1"></i>Milestone Timeline</strong>
+        <div class="d-flex gap-2">
+            <select id="statusFilter" class="form-select form-select-sm" style="width:auto;" onchange="renderTimeline()">
+                <option value="">All Statuses</option>
+                <option value="completed">Completed</option>
+                <option value="in_progress">In Progress</option>
+                <option value="not_started">Not Started</option>
+                <option value="at_risk">At Risk</option>
+                <option value="blocked">Blocked</option>
+                <option value="missed">Missed</option>
+            </select>
+        </div>
+    </div>
+    <div class="card-body" id="timelineContainer">
+        <p class="text-muted text-center py-4">Select a program to view milestones</p>
+    </div>
+</div>
+
+<!-- Add Milestone Modal -->
+<div class="modal fade" id="addMilestoneModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Add Milestone</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="form-label">Title *</label><input type="text" class="form-control" id="msTitle"></div>
+                <div class="row g-3">
+                    <div class="col-md-6"><label class="form-label">Type</label>
+                        <select class="form-select" id="msType">
+                            <option value="gate_review">Gate Review</option>
+                            <option value="go_live">Go Live</option>
+                            <option value="tsa_exit">TSA Exit</option>
+                            <option value="regulatory">Regulatory</option>
+                            <option value="integration">Integration</option>
+                            <option value="day1">Day 1</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6"><label class="form-label">Status</label>
+                        <select class="form-select" id="msStatus">
+                            <option value="not_started">Not Started</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="completed">Completed</option>
+                            <option value="at_risk">At Risk</option>
+                            <option value="blocked">Blocked</option>
+                            <option value="missed">Missed</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6"><label class="form-label">Target Date *</label><input type="date" class="form-control" id="msTargetDate"></div>
+                    <div class="col-md-6"><label class="form-label">Owner</label><input type="text" class="form-control" id="msOwner"></div>
+                </div>
+                <div class="mt-3 form-check">
+                    <input type="checkbox" class="form-check-input" id="msCriticalPath">
+                    <label class="form-check-label" for="msCriticalPath">Critical Path Item</label>
+                </div>
+                <div class="mt-3"><label class="form-label">Description</label><textarea class="form-control" id="msDescription" rows="2"></textarea></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="createMilestone()">Create Milestone</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var allMilestones = [];
+
+async function loadData() {
+    var pid = document.getElementById('programSelect').value;
+    if (!pid) return;
+    await loadMilestones(pid);
+}
+
+async function loadMilestones(programId) {
+    try {
+        var data = await apiCall('/api/programs/' + programId + '/milestones');
+        allMilestones = data.milestones || [];
+        renderSummary();
+        renderTimeline();
+    } catch(err) {
+        console.error('Failed to load milestones:', err);
+        document.getElementById('timelineContainer').innerHTML =
+            '<p class="text-muted text-center py-4">Failed to load milestones</p>';
+    }
+}
+
+function renderSummary() {
+    var total = allMilestones.length;
+    var completed = allMilestones.filter(function(m) { return m.status === 'completed'; }).length;
+    var atRisk = allMilestones.filter(function(m) { return m.status === 'at_risk' || m.status === 'blocked'; }).length;
+    var today = new Date().toISOString().split('T')[0];
+    var upcoming = allMilestones.filter(function(m) {
+        return m.status !== 'completed' && m.status !== 'missed' && m.target_date && m.target_date >= today;
+    }).length;
+
+    document.getElementById('totalMilestones').textContent = total;
+    document.getElementById('completedCount').textContent = completed;
+    document.getElementById('atRiskCount').textContent = atRisk;
+    document.getElementById('upcomingCount').textContent = upcoming;
+}
+
+function getStatusBadge(status) {
+    var styles = {
+        not_started: 'background:#6c757d;',
+        in_progress: 'background:#0d6efd;',
+        completed: 'background:#198754;',
+        at_risk: 'background:#ffc107;color:#000;',
+        blocked: 'background:#dc3545;',
+        missed: 'background:#dc354580;'
+    };
+    var labels = {
+        not_started: 'Not Started',
+        in_progress: 'In Progress',
+        completed: 'Completed',
+        at_risk: 'At Risk',
+        blocked: 'Blocked',
+        missed: 'Missed'
+    };
+    var style = styles[status] || 'background:#6c757d;';
+    return '<span class="badge" style="' + style + '">' + (labels[status] || status || 'Unknown') + '</span>';
+}
+
+function getTypeBadge(type) {
+    var styles = {
+        gate_review: 'background:#6f42c120;color:#6f42c1;',
+        go_live: 'background:#19875420;color:#198754;',
+        tsa_exit: 'background:#0d6efd20;color:#0d6efd;',
+        regulatory: 'background:#dc354520;color:#dc3545;',
+        integration: 'background:#0dcaf020;color:#0dcaf0;',
+        day1: 'background:#fd7e1420;color:#fd7e14;',
+        other: 'background:#6c757d20;color:#6c757d;'
+    };
+    var labels = {
+        gate_review: 'Gate Review',
+        go_live: 'Go Live',
+        tsa_exit: 'TSA Exit',
+        regulatory: 'Regulatory',
+        integration: 'Integration',
+        day1: 'Day 1',
+        other: 'Other'
+    };
+    var style = styles[type] || styles.other;
+    return '<span class="badge" style="' + style + '">' + (labels[type] || type || 'Other') + '</span>';
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return '--';
+    var d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+}
+
+function renderTimeline() {
+    var container = document.getElementById('timelineContainer');
+    var filter = document.getElementById('statusFilter').value;
+    var filtered = allMilestones;
+    if (filter) {
+        filtered = allMilestones.filter(function(m) { return m.status === filter; });
+    }
+
+    if (!filtered.length) {
+        container.innerHTML = '<p class="text-muted text-center py-4">No milestones found</p>';
+        return;
+    }
+
+    // Sort by target date
+    var sorted = filtered.slice().sort(function(a, b) {
+        var da = a.target_date || '9999-12-31';
+        var db = b.target_date || '9999-12-31';
+        return da.localeCompare(db);
+    });
+
+    var today = new Date().toISOString().split('T')[0];
+    var html = '<div class="timeline">';
+
+    sorted.forEach(function(ms) {
+        var isCritical = ms.critical_path || ms.is_critical_path;
+        var isOverdue = ms.target_date && ms.target_date < today && ms.status !== 'completed';
+        var daysInfo = '';
+        if (ms.target_date) {
+            var diff = Math.ceil((new Date(ms.target_date + 'T00:00:00') - new Date()) / (1000 * 60 * 60 * 24));
+            if (ms.status === 'completed') {
+                daysInfo = '<small class="text-success"><i class="bi bi-check-circle me-1"></i>Complete</small>';
+            } else if (diff < 0) {
+                daysInfo = '<small class="text-danger fw-bold">' + Math.abs(diff) + ' days overdue</small>';
+            } else if (diff <= 7) {
+                daysInfo = '<small class="text-warning">' + diff + ' days remaining</small>';
+            } else {
+                daysInfo = '<small class="text-muted">' + diff + ' days remaining</small>';
+            }
+        }
+
+        html += '<div class="timeline-item">';
+        html += '<div class="timeline-dot ' + (ms.status || 'not_started') + '"></div>';
+        html += '<div class="card timeline-card' + (isCritical ? ' critical-path' : '') + '">';
+        html += '<div class="card-body py-2 px-3">';
+        html += '<div class="d-flex justify-content-between align-items-start">';
+        html += '<div>';
+        html += '<h6 class="mb-1">' + (ms.title || ms.name || 'Untitled') + '</h6>';
+        html += '<div class="d-flex gap-2 flex-wrap align-items-center">';
+        html += getTypeBadge(ms.type || ms.milestone_type);
+        html += getStatusBadge(ms.status);
+        if (isCritical) html += '<span class="badge" style="background:#dc354520;color:#dc3545;"><i class="bi bi-exclamation-diamond me-1"></i>Critical Path</span>';
+        html += '</div>';
+        if (ms.description) html += '<p class="text-muted small mt-1 mb-0">' + ms.description + '</p>';
+        if (ms.owner) html += '<small class="text-muted"><i class="bi bi-person me-1"></i>' + ms.owner + '</small>';
+        html += '</div>';
+        html += '<div class="text-end">';
+        html += '<div' + (isOverdue ? ' class="text-danger fw-bold"' : '') + '><i class="bi bi-calendar3 me-1"></i>' + formatDate(ms.target_date) + '</div>';
+        html += daysInfo;
+        html += '</div></div>';
+        html += '</div></div></div>';
+    });
+
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function showAddMilestone() {
+    if (!document.getElementById('programSelect').value) { alert('Select a program first.'); return; }
+    new bootstrap.Modal(document.getElementById('addMilestoneModal')).show();
+}
+
+async function createMilestone() {
+    var pid = document.getElementById('programSelect').value;
+    var payload = {
+        title: document.getElementById('msTitle').value,
+        type: document.getElementById('msType').value,
+        status: document.getElementById('msStatus').value,
+        target_date: document.getElementById('msTargetDate').value || null,
+        owner: document.getElementById('msOwner').value,
+        critical_path: document.getElementById('msCriticalPath').checked,
+        description: document.getElementById('msDescription').value
+    };
+    if (!payload.title) { alert('Title is required'); return; }
+    if (!payload.target_date) { alert('Target date is required'); return; }
+    try {
+        await apiCall('/api/programs/' + pid + '/milestones', 'POST', payload);
+        bootstrap.Modal.getInstance(document.getElementById('addMilestoneModal')).hide();
+        document.getElementById('msTitle').value = '';
+        document.getElementById('msTargetDate').value = '';
+        document.getElementById('msOwner').value = '';
+        document.getElementById('msCriticalPath').checked = false;
+        document.getElementById('msDescription').value = '';
+        loadData();
+    } catch(err) {
+        alert('Error creating milestone: ' + err.message);
+    }
+}
+</script>
 {% endblock %}
