@@ -114,7 +114,8 @@ def create_app():
                              program=program, workstreams=workstreams,
                              tasks=tasks, milestones=milestones,
                              raid_open=raid_open, tsa_active=tsa_active,
-                             analyses=analyses)
+                             analyses=analyses,
+                             today=date.today())
 
     @app.route('/projects')
     def projects():
