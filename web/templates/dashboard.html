@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - {{ app_name }}{% endblock %}
+{% block page_title %}Program Dashboard{% endblock %}
+{% block content %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="bi bi-speedometer2 me-2"></i>Program Dashboard</h2>
+            <p class="text-muted mb-0">Monitor and manage your separation programs</p>
+        </div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addProgramModal">
+            <i class="bi bi-plus-lg me-2"></i>New Program
+        </button>
+    </div>
+
+    {% if programs %}
+    <div class="row g-4">
+        {% for program in programs %}
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h5 class="card-title mb-1">{{ program.name }}</h5>
+                            <small class="text-muted">{{ program.program_type | title }} | {{ program.status | title }}</small>
+                        </div>
+                        {% if program.overall_health_score %}
+                        <div class="text-end">
+                            <div class="health-score {{ 'score-excellent' if program.overall_health_score >= 80 else 'score-good' if program.overall_health_score >= 70 else 'score-fair' if program.overall_health_score >= 60 else 'score-poor' }}" style="font-size:1.5rem;">
+                                {{ "%.0f"|format(program.overall_health_score) }}
+                            </div>
+                            <small class="text-muted">Health Score</small>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    {% if program.buyer_name and program.seller_name %}
+                    <div class="mb-2">
+                        <small class="text-muted">{{ program.seller_name }} → {{ program.buyer_name }}</small>
+                    </div>
+                    {% endif %}
+
+                    {% if program.target_end_date %}
+                    <div class="mb-3">
+                        <small class="text-muted">Target: {{ program.target_end_date.strftime('%b %d, %Y') }}</small>
+                    </div>
+                    {% endif %}
+
+                    <div class="d-flex gap-2">
+                        <a href="/program/{{ program.id }}" class="btn btn-outline-primary btn-sm flex-fill">
+                            <i class="bi bi-eye me-1"></i>View
+                        </a>
+                        <a href="/projects" class="btn btn-primary btn-sm flex-fill">
+                            <i class="bi bi-kanban me-1"></i>Tasks
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <!-- Onboarding -->
+    <div class="card" style="border:2px dashed var(--pt-border-default);background:transparent;">
+        <div class="card-body text-center py-5">
+            <div style="font-size:3.5rem;margin-bottom:1rem;">
+                <i class="bi bi-rocket-takeoff" style="color:var(--cfi-primary);"></i>
+            </div>
+            <h3>Welcome to Separation PMO</h3>
+            <p class="text-muted mb-4" style="max-width:500px;margin:0 auto;">AI-powered platform for managing carve-outs, divestitures, and complex transformation programs.</p>
+
+            <div class="row g-4 mt-2 text-start" style="max-width:800px;margin:0 auto;">
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body text-center">
+                            <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width:48px;height:48px;background:rgba(25,135,84,0.1);">
+                                <span style="color:#198754;font-weight:700;font-size:1.25rem;">1</span>
+                            </div>
+                            <h6>Create Program</h6>
+                            <p class="text-muted small mb-3">Set up your separation program with deal details and timeline.</p>
+                            <button class="btn btn-primary btn-sm w-100" data-bs-toggle="modal" data-bs-target="#addProgramModal">
+                                <i class="bi bi-plus-lg me-1"></i>New Program
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body text-center">
+                            <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width:48px;height:48px;background:rgba(13,202,240,0.1);">
+                                <span style="color:#0dcaf0;font-weight:700;font-size:1.25rem;">2</span>
+                            </div>
+                            <h6>Build Workplan</h6>
+                            <p class="text-muted small mb-3">Add tasks, milestones, and dependencies across 9 workstreams.</p>
+                            <a href="/projects" class="btn btn-outline-info btn-sm w-100">
+                                <i class="bi bi-kanban me-1"></i>Task Manager
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body text-center">
+                            <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width:48px;height:48px;background:rgba(201,168,76,0.1);">
+                                <span style="color:#C9A84C;font-weight:700;font-size:1.25rem;">3</span>
+                            </div>
+                            <h6>Track & Report</h6>
+                            <p class="text-muted small mb-3">Monitor progress, manage risks, and generate executive reports.</p>
+                            <a href="/reporting" class="btn btn-outline-warning btn-sm w-100">
+                                <i class="bi bi-file-earmark-bar-graph me-1"></i>Reports
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Add Program Modal -->
+<div class="modal fade" id="addProgramModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create Separation Program</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addProgramForm">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label">Program Name *</label>
+                            <input type="text" class="form-control" id="programName" placeholder="e.g., Acme Corp Divestiture" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Type</label>
+                            <select class="form-select" id="programType">
+                                <option value="carve-out">Carve-Out</option>
+                                <option value="divestiture">Divestiture</option>
+                                <option value="merger">Merger</option>
+                                <option value="integration">Integration</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Seller</label>
+                            <input type="text" class="form-control" id="sellerName" placeholder="Selling entity">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Buyer</label>
+                            <input type="text" class="form-control" id="buyerName" placeholder="Acquiring entity">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Start Date</label>
+                            <input type="date" class="form-control" id="startDate">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Target End Date</label>
+                            <input type="date" class="form-control" id="endDate">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Program Lead</label>
+                            <input type="text" class="form-control" id="programLead">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-control" id="programDesc" rows="2"></textarea>
+                        </div>
+                    </div>
+                    <div class="alert alert-info mt-3 mb-0">
+                        <i class="bi bi-info-circle me-2"></i>9 functional workstreams (Finance, HR, IT, Legal, Ops, Procurement, Supply Chain, Commercial, Comms) will be auto-created.
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="createProgram()">Create Program</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function createProgram() {
+    var data = {
+        name: document.getElementById('programName').value,
+        program_type: document.getElementById('programType').value,
+        seller_name: document.getElementById('sellerName').value,
+        buyer_name: document.getElementById('buyerName').value,
+        start_date: document.getElementById('startDate').value || null,
+        target_end_date: document.getElementById('endDate').value || null,
+        program_lead: document.getElementById('programLead').value,
+        description: document.getElementById('programDesc').value,
+    };
+    if (!data.name) { alert('Program name is required'); return; }
+    try {
+        var result = await apiCall('/api/programs', 'POST', data);
+        if (result.success) {
+            window.location.href = '/program/' + result.program.id;
+        }
+    } catch(err) { alert('Error: ' + err.message); }
+}
+</script>
+{% endblock %}

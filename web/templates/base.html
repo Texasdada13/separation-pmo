@@ -1,0 +1,546 @@
+{% extends "patriot/base.html" %}
+
+{# Bridge block: page templates use "extra_css" → kit uses "head_extra" #}
+{% block head_extra %}
+    <style>
+    /* ==========================================================
+       CFO Intelligence – Bridge styles
+       Maps legacy CSS vars/classes to the Patriot UI Kit tokens
+       and forces readable text in both light and dark themes.
+       ========================================================== */
+
+    /* ---- Legacy CSS variables used by all page templates ---- */
+    :root,
+    [data-theme="dark"] {
+        --cfi-gradient: linear-gradient(135deg, var(--pt-color-navy-700) 0%, var(--pt-color-navy-600) 50%, var(--pt-color-blue-700) 100%);
+        --cfi-primary: #3A7BD5;
+        --cfi-primary-light: #5A9BE6;
+        --cfi-accent: #C9A84C;
+        --muted-color: var(--pt-color-navy-200);
+        --accent-color: var(--pt-color-gold-500);
+        --card-bg: var(--pt-card-bg);
+        --text-color: var(--pt-text-primary);
+        --border-color: var(--pt-border-default);
+    }
+
+    [data-theme="light"] {
+        --cfi-gradient: linear-gradient(135deg, var(--pt-color-navy-600) 0%, var(--pt-color-blue-600) 100%);
+        --cfi-primary: #2563EB;
+        --cfi-primary-light: #3B82F6;
+        --cfi-accent: #B8960F;
+        --muted-color: var(--pt-color-navy-400);
+        --accent-color: var(--pt-color-gold-600);
+        --card-bg: var(--pt-card-bg);
+        --text-color: var(--pt-text-primary);
+        --border-color: var(--pt-border-default);
+    }
+
+    /* ---- Force strong, readable text everywhere ---- */
+    body,
+    .pt-content,
+    .card,
+    .card-body,
+    .card-header,
+    .card-footer,
+    .modal-content,
+    .list-group-item,
+    .accordion-item,
+    .accordion-body,
+    .dropdown-menu {
+        color: var(--pt-text-primary);
+    }
+
+    h1, h2, h3, h4, h5, h6,
+    .h1, .h2, .h3, .h4, .h5, .h6,
+    .card-title,
+    .modal-title {
+        color: var(--pt-text-primary);
+        font-weight: var(--pt-font-semibold);
+    }
+
+    .text-muted {
+        color: var(--muted-color) !important;
+    }
+
+    .text-secondary {
+        color: var(--muted-color) !important;
+    }
+
+    /* ---- Legacy metric cards (used on every module page) ---- */
+    .metric-card {
+        padding: 1.25rem;
+        text-align: center;
+    }
+
+    .metric-value {
+        font-size: 2rem;
+        font-weight: var(--pt-font-bold);
+        line-height: 1.1;
+    }
+
+    .metric-label {
+        font-size: var(--pt-text-sm);
+        color: var(--pt-text-primary);
+        font-weight: var(--pt-font-medium);
+        margin-top: 0.25rem;
+    }
+
+    /* ---- Health scores & risk badges (dashboard) ---- */
+    .health-score { font-weight: var(--pt-font-bold); }
+    .score-excellent { color: var(--pt-color-green-500); }
+    .score-good     { color: var(--pt-color-blue-500); }
+    .score-fair     { color: var(--pt-color-yellow-500); }
+    .score-poor     { color: var(--pt-color-red-500); }
+    .score-critical { color: var(--pt-color-red-600); }
+
+    .risk-low      { background: var(--pt-status-success-bg); color: var(--pt-color-green-400); }
+    .risk-medium   { background: var(--pt-status-warning-bg); color: var(--pt-color-yellow-400); }
+    .risk-high     { background: var(--pt-status-danger-bg);  color: var(--pt-color-red-400); }
+    .risk-critical { background: rgba(220,53,69,0.25);         color: var(--pt-color-red-300); }
+
+    /* ---- Bootstrap component dark-mode fixes ---- */
+    .card {
+        background: var(--pt-card-bg);
+        border-color: var(--pt-card-border);
+    }
+
+    .card-header {
+        background: var(--pt-bg-surface);
+        border-color: var(--pt-border-default);
+    }
+
+    .card-footer {
+        background: var(--pt-bg-surface) !important;
+        border-color: var(--pt-border-default) !important;
+    }
+
+    .modal-content {
+        background: var(--pt-bg-elevated);
+        border-color: var(--pt-border-default);
+    }
+
+    .modal-header,
+    .modal-footer {
+        border-color: var(--pt-border-default);
+    }
+
+    .modal-header .btn-close {
+        filter: invert(1) grayscale(100%) brightness(200%);
+    }
+
+    [data-theme="light"] .modal-header .btn-close {
+        filter: none;
+    }
+
+    .form-control, .form-select {
+        background-color: var(--pt-input-bg);
+        border-color: var(--pt-input-border);
+        color: var(--pt-text-primary);
+    }
+
+    .form-control:focus, .form-select:focus {
+        background-color: var(--pt-input-bg);
+        border-color: var(--pt-border-focus);
+        color: var(--pt-text-primary);
+        box-shadow: 0 0 0 3px rgba(58, 123, 213, 0.15);
+    }
+
+    .form-control::placeholder { color: var(--pt-text-muted); }
+    .form-label { color: var(--pt-text-secondary); font-weight: var(--pt-font-medium); }
+
+    .btn-secondary {
+        background: var(--pt-bg-surface);
+        border-color: var(--pt-border-default);
+        color: var(--pt-text-primary);
+    }
+
+    .btn-secondary:hover {
+        background: var(--pt-bg-surface-hover);
+        border-color: var(--pt-border-accent);
+        color: var(--pt-text-primary);
+    }
+
+    .btn-outline-primary {
+        color: var(--pt-color-blue-400);
+        border-color: var(--pt-color-blue-400);
+    }
+
+    .btn-outline-primary:hover {
+        background: var(--pt-interactive-primary);
+        border-color: var(--pt-interactive-primary);
+        color: var(--pt-color-white);
+    }
+
+    .table { color: var(--pt-text-primary); }
+
+    .table > :not(caption) > * > * {
+        background-color: transparent;
+        border-bottom-color: var(--pt-border-default);
+        color: var(--pt-text-primary);
+    }
+
+    .progress { background: var(--pt-bg-surface); }
+
+    .list-group-item {
+        background: var(--pt-bg-surface);
+        border-color: var(--pt-border-default);
+    }
+
+    .accordion-item { background: var(--pt-card-bg); border-color: var(--pt-border-default); }
+    .accordion-button { background: var(--pt-card-bg); color: var(--pt-text-primary); }
+    .accordion-button:not(.collapsed) { background: var(--pt-bg-surface); color: var(--pt-text-primary); }
+
+    .dropdown-item { color: var(--pt-text-secondary); }
+    .dropdown-item:hover { background: var(--pt-bg-surface-hover); color: var(--pt-text-primary); }
+
+    .nav-tabs { border-color: var(--pt-border-default); }
+    .nav-tabs .nav-link { color: var(--pt-text-muted); }
+    .nav-tabs .nav-link.active { background: var(--pt-card-bg); border-color: var(--pt-border-default); color: var(--pt-text-primary); }
+
+    .badge.bg-secondary { background: var(--pt-bg-surface) !important; color: var(--pt-text-secondary); }
+
+    hr { border-color: var(--pt-border-default); opacity: 1; }
+    a { color: var(--pt-interactive-primary); }
+    a:hover { color: var(--pt-interactive-primary-hover); }
+
+    /* Alert overrides */
+    .alert-info    { background: var(--pt-status-info-bg);    border-color: rgba(58,123,213,0.25);  color: var(--pt-color-blue-300); }
+    .alert-success { background: var(--pt-status-success-bg); border-color: rgba(16,185,129,0.25);  color: var(--pt-color-green-300); }
+    .alert-warning { background: var(--pt-status-warning-bg); border-color: rgba(245,158,11,0.25);  color: var(--pt-color-yellow-300); }
+    .alert-danger  { background: var(--pt-status-danger-bg);  border-color: rgba(239,68,68,0.25);   color: var(--pt-color-red-300); }
+
+    /* Light-mode tweaks */
+    [data-theme="light"] .card-footer { background: var(--pt-color-white) !important; }
+
+    /* ---- Demo data banner ---- */
+    .cfi-demo-banner {
+        background: var(--pt-status-warning-bg);
+        border: 1px solid rgba(245,158,11,0.25);
+        border-radius: 8px;
+        padding: 0.65rem 1rem;
+        margin-bottom: 1rem;
+        font-size: var(--pt-text-sm);
+        color: var(--pt-color-yellow-300);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    [data-theme="light"] .cfi-demo-banner {
+        color: #92400E;
+        background: #FEF3C7;
+        border-color: #F59E0B40;
+    }
+    .cfi-demo-banner a { font-weight: var(--pt-font-semibold); }
+
+    /* ---- Analysis history sidebar ---- */
+    .cfi-history-item {
+        padding: 0.6rem 0.75rem;
+        border-radius: 6px;
+        background: var(--pt-bg-surface);
+        margin-bottom: 0.4rem;
+        cursor: default;
+        transition: background 0.15s;
+    }
+    .cfi-history-item:hover { background: var(--pt-bg-surface-hover); }
+    .cfi-history-score {
+        font-size: 1.25rem;
+        font-weight: var(--pt-font-bold);
+        line-height: 1;
+    }
+    .cfi-history-date {
+        font-size: 0.75rem;
+        color: var(--muted-color);
+    }
+
+    /* ---- Analysis detail modal ---- */
+    .cfi-detail-header {
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+        margin-bottom: 1.5rem;
+    }
+    .cfi-detail-score-ring {
+        width: 90px; height: 90px;
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+        font-size: 2rem; font-weight: var(--pt-font-bold);
+    }
+    .cfi-detail-section {
+        margin-bottom: 1.25rem;
+    }
+    .cfi-detail-section h6 {
+        font-weight: var(--pt-font-semibold);
+        margin-bottom: 0.5rem;
+        display: flex; align-items: center; gap: 0.4rem;
+    }
+    .cfi-detail-insight {
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        background: var(--pt-bg-surface);
+        margin-bottom: 0.35rem;
+        font-size: 0.875rem;
+    }
+    .cfi-detail-rec {
+        padding: 0.6rem 0.75rem;
+        border-radius: 6px;
+        margin-bottom: 0.4rem;
+        border-left: 3px solid;
+    }
+    .cfi-detail-rec.high { border-color: #dc3545; background: rgba(220,53,69,0.06); }
+    .cfi-detail-rec.medium { border-color: #ffc107; background: rgba(255,193,7,0.06); }
+    .cfi-detail-rec.low { border-color: #198754; background: rgba(25,135,84,0.06); }
+
+    /* ---- Print/Export styles ---- */
+    @media print {
+        .pt-sidebar, .pt-topbar, .modal-footer, .modal-header .btn-close,
+        nav, .breadcrumb, .btn, .cfi-demo-banner { display: none !important; }
+        .modal { position: static !important; display: block !important; }
+        .modal-dialog { max-width: 100% !important; margin: 0 !important; }
+        .modal-content { border: none !important; box-shadow: none !important; }
+        .modal-body { padding: 0 !important; }
+        .modal-backdrop { display: none !important; }
+        body { background: #fff !important; color: #000 !important; }
+        .cfi-detail-score-ring { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+        .progress-bar, .badge { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+        .cfi-detail-rec { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    }
+
+    /* ---- Tooltips ---- */
+    .cfi-tip {
+        border-bottom: 1px dashed currentColor;
+        cursor: help;
+        opacity: 0.85;
+    }
+    .cfi-tip:hover { opacity: 1; }
+    </style>
+
+    <!-- Analysis Detail Modal (shared across all module pages) -->
+    <div class="modal fade" id="analysisDetailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="analysisDetailTitle">Analysis Results</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="analysisDetailBody">
+                    <!-- Populated by JS -->
+                </div>
+                <div class="modal-footer">
+                    <small class="text-muted me-auto" id="analysisDetailMeta"></small>
+                    <button type="button" class="btn btn-outline-primary" onclick="exportAnalysis()">
+                        <i class="bi bi-download me-1"></i>Export PDF
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% block extra_css %}{% endblock %}
+{% endblock %}
+
+{# Bridge block: page templates use "extra_js" → kit uses "scripts_extra" #}
+{% block scripts_extra %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>if (typeof Chart !== 'undefined') { PatriotChartTheme.apply(); }</script>
+    <script>
+    /* CFI gauge/canvas helper — theme-aware colors for hand-drawn canvases */
+    var CFI = (function() {
+        function isDark() { return document.documentElement.getAttribute('data-theme') !== 'light'; }
+        return {
+            gaugeTrack:  function() { return isDark() ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.10)'; },
+            gaugeText:   function() { return isDark() ? '#e6edf3' : '#1B3A5C'; },
+            gaugeSub:    function() { return isDark() ? 'rgba(255,255,255,0.6)' : '#64748B'; }
+        };
+    })();
+    /* Shared API helper used by company, dashboard, and chat pages */
+    async function apiCall(url, method, body) {
+        var opts = { method: method || 'GET', headers: {'Content-Type': 'application/json'} };
+        if (body) opts.body = JSON.stringify(body);
+        var resp = await fetch(url, opts);
+        var data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'API request failed');
+        return data;
+    }
+    </script>
+    <script>
+    /**
+     * Load and render analysis history for a module.
+     * @param {string} companyId
+     * @param {string} analysisType - e.g. 'valuation', 'controls'
+     * @param {string} containerId - DOM element ID to render into
+     */
+    async function loadAnalysisHistory(companyId, analysisType, containerId) {
+        var container = document.getElementById(containerId);
+        if (!container || !companyId) return;
+        try {
+            var data = await apiCall('/api/companies/' + companyId + '/analyses?type=' + analysisType);
+            var analyses = data.analyses || [];
+            if (!analyses.length) {
+                container.innerHTML = '<p class="text-muted small mb-0">No previous analyses yet.</p>';
+                return;
+            }
+            container.innerHTML = analyses.map(function(a) {
+                var dt = new Date(a.created_at);
+                var dateStr = dt.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+                var timeStr = dt.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+                var scoreColor = a.overall_score >= 75 ? '#198754' : a.overall_score >= 50 ? '#ffc107' : '#dc3545';
+                return '<div class="cfi-history-item d-flex justify-content-between align-items-center" style="cursor:pointer;" onclick="fetchAndShowAnalysis(\'' + a.id + '\')">' +
+                    '<div><div class="cfi-history-score" style="color:' + scoreColor + ';">' + Math.round(a.overall_score) + '<small style="font-size:0.6em;color:var(--muted-color);">/100</small></div>' +
+                    '<div class="cfi-history-date">' + dateStr + ' ' + timeStr + '</div></div>' +
+                    '<span class="badge ' + (a.overall_score >= 75 ? 'bg-success' : a.overall_score >= 50 ? 'bg-warning text-dark' : 'bg-danger') + '">' + (a.grade || '') + '</span></div>';
+            }).join('');
+        } catch(err) {
+            container.innerHTML = '<p class="text-muted small mb-0">Could not load history.</p>';
+        }
+    }
+
+    async function fetchAndShowAnalysis(analysisId) {
+        try {
+            var resp = await fetch('/api/analyses/' + analysisId);
+            var data = await resp.json();
+            if (data.results) showAnalysisDetail(data.results, data.analysis_type);
+        } catch(err) { console.error('Could not load analysis:', err); }
+    }
+
+    /**
+     * Show the analysis detail modal with full AI results.
+     * @param {object} results - The full AI analysis results object
+     * @param {string} analysisType - e.g. 'valuation', 'controls'
+     */
+    function showAnalysisDetail(results, analysisType) {
+        var r = results;
+        var typeLabels = {
+            valuation:'Business Valuation', profitability:'Profitability Analysis',
+            controls:'Financial Controls', capital:'Capital & Financing',
+            controller:'Controller Services', startup:'Startup Consulting',
+            ma_advisory:'M&A Advisory', exit_planning:'Exit Planning'
+        };
+        var title = typeLabels[analysisType] || analysisType;
+        var score = r.overall_score || 0;
+        var grade = r.grade || '—';
+        var scoreColor = score >= 75 ? '#198754' : score >= 50 ? '#ffc107' : '#dc3545';
+        var scoreBg = score >= 75 ? 'rgba(25,135,84,0.12)' : score >= 50 ? 'rgba(255,193,7,0.12)' : 'rgba(220,53,69,0.12)';
+
+        var html = '';
+
+        // --- Header with score ---
+        html += '<div class="cfi-detail-header">';
+        html += '<div class="cfi-detail-score-ring" style="background:' + scoreBg + ';color:' + scoreColor + ';">' + Math.round(score) + '</div>';
+        html += '<div><h4 class="mb-1">' + title + '</h4>';
+        html += '<span class="badge" style="background:' + scoreColor + ';font-size:0.9rem;">' + grade + '</span>';
+        html += ' <span class="text-muted ms-2" style="font-size:0.85rem;">Score: ' + Math.round(score) + '/100</span></div></div>';
+
+        // --- Category scores (if present) ---
+        var cats = r.category_scores;
+        if (cats && typeof cats === 'object') {
+            html += '<div class="cfi-detail-section"><h6><i class="bi bi-bar-chart"></i> Category Breakdown</h6>';
+            var catEntries = Array.isArray(cats) ? cats : Object.entries(cats).map(function(e) { return {name: e[0].replace(/_/g,' '), score: e[1]}; });
+            catEntries.forEach(function(c) {
+                var cs = c.score || 0;
+                var cc = cs >= 75 ? '#198754' : cs >= 50 ? '#ffc107' : '#dc3545';
+                html += '<div class="d-flex justify-content-between align-items-center mb-1"><span style="text-transform:capitalize;">' + (c.name || '') + '</span><strong style="color:' + cc + ';">' + Math.round(cs) + '/100</strong></div>';
+                html += '<div class="progress mb-2" style="height:5px;"><div class="progress-bar" style="width:' + cs + '%;background:' + cc + ';"></div></div>';
+            });
+            html += '</div>';
+        }
+
+        // --- Methods (valuation) ---
+        if (r.methods && r.methods.length) {
+            html += '<div class="cfi-detail-section"><h6><i class="bi bi-calculator"></i> Valuation Methods</h6>';
+            r.methods.forEach(function(m) {
+                html += '<div class="d-flex justify-content-between cfi-detail-insight"><span><strong>' + m.name + '</strong> — ' + (m.basis || '') + '</span>';
+                html += '<strong style="color:#198754;">$' + (m.value/1e6).toFixed(1) + 'M</strong></div>';
+            });
+            html += '</div>';
+        }
+
+        // --- Insights ---
+        if (r.insights && r.insights.length) {
+            html += '<div class="cfi-detail-section"><h6><i class="bi bi-lightbulb"></i> Key Insights</h6>';
+            r.insights.forEach(function(i) {
+                html += '<div class="cfi-detail-insight"><i class="bi bi-arrow-right-circle me-2 text-info"></i>' + i + '</div>';
+            });
+            html += '</div>';
+        }
+
+        // --- Recommendations ---
+        if (r.recommendations && r.recommendations.length) {
+            html += '<div class="cfi-detail-section"><h6><i class="bi bi-check2-square"></i> Recommendations</h6>';
+            r.recommendations.forEach(function(rec) {
+                var p = (rec.priority || 'medium').toLowerCase();
+                var pColor = p === 'high' ? '#dc3545' : p === 'medium' ? '#ffc107' : '#198754';
+                var pClass = p === 'high' ? 'high' : p === 'medium' ? 'medium' : 'low';
+                html += '<div class="cfi-detail-rec ' + pClass + '">';
+                html += '<div class="d-flex justify-content-between mb-1"><strong>' + (rec.title || '') + '</strong><span class="badge" style="background:' + pColor + ';">' + (rec.priority || '') + '</span></div>';
+                html += '<div style="font-size:0.85rem;">' + (rec.detail || '') + '</div>';
+                if (rec.impact) html += '<small class="text-success"><i class="bi bi-graph-up-arrow me-1"></i>' + rec.impact + '</small>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        // --- Value drivers (valuation) ---
+        if (r.value_drivers && r.value_drivers.length) {
+            html += '<div class="cfi-detail-section"><h6><i class="bi bi-stars"></i> Value Drivers</h6>';
+            r.value_drivers.forEach(function(d) {
+                var dc = d.score >= 75 ? '#198754' : d.score >= 50 ? '#ffc107' : '#dc3545';
+                html += '<div class="d-flex justify-content-between cfi-detail-insight"><span>' + d.name + ' — ' + (d.detail || '') + '</span><strong style="color:' + dc + ';">' + d.score + '</strong></div>';
+            });
+            html += '</div>';
+        }
+
+        // --- Critical gaps (controls) ---
+        if (r.critical_gaps && r.critical_gaps.length) {
+            html += '<div class="cfi-detail-section"><h6><i class="bi bi-exclamation-triangle text-danger"></i> Critical Gaps</h6>';
+            r.critical_gaps.forEach(function(g) {
+                html += '<div class="cfi-detail-rec high"><strong>' + (g.area || '') + '</strong> (' + (g.severity || '') + ')<div style="font-size:0.85rem;">' + (g.detail || '') + '</div>';
+                if (g.remediation) html += '<small class="text-info"><i class="bi bi-wrench me-1"></i>' + g.remediation + '</small>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        // --- Enhancement roadmap (valuation) ---
+        if (r.enhancement_roadmap && r.enhancement_roadmap.length) {
+            html += '<div class="cfi-detail-section"><h6><i class="bi bi-signpost-2"></i> Enhancement Roadmap</h6>';
+            r.enhancement_roadmap.forEach(function(item) {
+                html += '<div class="cfi-detail-insight"><strong>' + item.quarter + '</strong> — ' + item.action;
+                if (item.estimated_value_add) html += ' <span class="text-success">(+$' + (item.estimated_value_add/1000).toFixed(0) + 'K)</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        // Set modal content
+        document.getElementById('analysisDetailTitle').textContent = title + ' Results';
+        document.getElementById('analysisDetailBody').innerHTML = html;
+
+        var meta = r._meta || {};
+        document.getElementById('analysisDetailMeta').textContent =
+            'Model: ' + (meta.model || 'AI') + ' | Generated: ' + (meta.generated_at ? new Date(meta.generated_at).toLocaleString() : 'just now');
+
+        var modal = new bootstrap.Modal(document.getElementById('analysisDetailModal'));
+        modal.show();
+    }
+
+    /**
+     * Export analysis detail modal as PDF via browser print.
+     */
+    function exportAnalysis() {
+        var title = document.getElementById('analysisDetailTitle').textContent;
+        var originalTitle = document.title;
+        document.title = title + ' - CFO Intelligence';
+        window.print();
+        document.title = originalTitle;
+    }
+
+    /* Initialize Bootstrap tooltips on any element with data-bs-toggle="tooltip" */
+    document.addEventListener('DOMContentLoaded', function() {
+        var tooltips = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltips.forEach(function(el) { new bootstrap.Tooltip(el); });
+    });
+    </script>
+    {% block extra_js %}{% endblock %}
+{% endblock %}
