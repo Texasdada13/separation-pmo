@@ -44,6 +44,7 @@
 <ul class="nav nav-tabs mb-3" id="viewTabs">
     <li class="nav-item"><a class="nav-link active" href="#" onclick="switchView('kanban');return false;"><i class="bi bi-kanban me-1"></i>Kanban</a></li>
     <li class="nav-item"><a class="nav-link" href="#" onclick="switchView('list');return false;"><i class="bi bi-list-ul me-1"></i>List</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchView('client');return false;"><i class="bi bi-people me-1"></i>Client Tasks</a></li>
 </ul>
 
 <!-- Kanban View -->
@@ -76,6 +77,50 @@
                 <table class="table table-hover mb-0">
                     <thead><tr><th>Task</th><th>Workstream</th><th>Assignee</th><th>Priority</th><th>Status</th><th>Due Date</th><th>Hours</th></tr></thead>
                     <tbody id="taskTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Client Tasks View -->
+<div id="clientView" class="d-none">
+    <div class="row g-3 mb-3">
+        <div class="col-md-3">
+            <div class="card metric-card">
+                <div class="metric-value" id="clientTotal" style="color:#0dcaf0;">--</div>
+                <div class="metric-label">Client Tasks</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card metric-card">
+                <div class="metric-value" id="clientComplete" style="color:#198754;">--</div>
+                <div class="metric-label">Completed</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card metric-card">
+                <div class="metric-value" id="clientOverdue" style="color:#dc3545;">--</div>
+                <div class="metric-label">Overdue</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card metric-card">
+                <div class="metric-value" id="clientPct" style="color:#0d6efd;">--</div>
+                <div class="metric-label">Completion %</div>
+            </div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong><i class="bi bi-people me-1"></i>Client-Assigned Tasks</strong>
+            <small class="text-muted">Tasks where client team members are accountable</small>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead><tr><th>Task</th><th>Workstream</th><th>Assignee</th><th>Priority</th><th>Status</th><th>Due Date</th><th>Hours</th></tr></thead>
+                    <tbody id="clientTaskBody"></tbody>
                 </table>
             </div>
         </div>
@@ -124,10 +169,12 @@ var allTasks = [];
 var workstreams = {};
 
 function switchView(view) {
-    document.getElementById('kanbanView').classList.toggle('d-none', view !== 'kanban');
-    document.getElementById('listView').classList.toggle('d-none', view !== 'list');
+    ['kanbanView','listView','clientView'].forEach(function(id) {
+        document.getElementById(id).classList.toggle('d-none', id !== view + 'View');
+    });
     document.querySelectorAll('#viewTabs .nav-link').forEach(function(el) { el.classList.remove('active'); });
     event.target.closest('.nav-link').classList.add('active');
+    if (view === 'client') renderClientTasks();
 }
 
 async function loadTasks() {
@@ -240,6 +287,49 @@ async function createTask() {
     bootstrap.Modal.getInstance(document.getElementById('addTaskModal')).hide();
     document.getElementById('taskTitle').value = '';
     loadTasks();
+}
+
+function renderClientTasks() {
+    var clientTasks = allTasks.filter(function(t) { return t.assignee_type === 'client'; });
+    var total = clientTasks.length;
+    var complete = clientTasks.filter(function(t) { return t.status === 'complete'; }).length;
+    var today = new Date().toISOString().split('T')[0];
+    var overdue = clientTasks.filter(function(t) { return t.due_date && t.due_date < today && t.status !== 'complete'; }).length;
+    var pct = total > 0 ? Math.round(complete / total * 100) : 0;
+
+    document.getElementById('clientTotal').textContent = total;
+    document.getElementById('clientComplete').textContent = complete;
+    document.getElementById('clientOverdue').textContent = overdue;
+    document.getElementById('clientPct').textContent = pct + '%';
+
+    var tbody = document.getElementById('clientTaskBody');
+    if (!clientTasks.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No client-assigned tasks</td></tr>';
+        return;
+    }
+
+    var sorted = clientTasks.slice().sort(function(a, b) {
+        if (a.status === 'complete' && b.status !== 'complete') return 1;
+        if (b.status === 'complete' && a.status !== 'complete') return -1;
+        return (a.due_date || '').localeCompare(b.due_date || '');
+    });
+
+    tbody.innerHTML = sorted.map(function(t) {
+        var isOverdue = t.due_date && t.due_date < today && t.status !== 'complete';
+        var priorityColors = { critical: '#dc3545', high: '#fd7e14', medium: '#ffc107', low: '#198754' };
+        var statusColors = { not_started: '#6c757d', in_progress: '#0d6efd', complete: '#198754', blocked: '#dc3545', review: '#6f42c1' };
+        var wsName = workstreams[t.workstream_id] || '--';
+
+        return '<tr' + (isOverdue ? ' class="table-danger"' : '') + '>' +
+            '<td><strong>' + t.title + '</strong></td>' +
+            '<td><small>' + wsName + '</small></td>' +
+            '<td>' + (t.assignee_name || '--') + ' <span class="badge bg-info" style="font-size:0.55rem;">Client</span></td>' +
+            '<td><span class="badge" style="background:' + (priorityColors[t.priority] || '#6c757d') + ';">' + (t.priority || '--') + '</span></td>' +
+            '<td><span class="badge" style="background:' + (statusColors[t.status] || '#6c757d') + ';">' + (t.status || '--').replace('_', ' ') + '</span></td>' +
+            '<td><small' + (isOverdue ? ' class="text-danger fw-bold"' : '') + '>' + (t.due_date || '--') + (isOverdue ? ' <i class="bi bi-exclamation-triangle"></i>' : '') + '</small></td>' +
+            '<td><small>' + (t.estimated_hours ? t.estimated_hours + 'h' : '--') + '</small></td>' +
+            '</tr>';
+    }).join('');
 }
 </script>
 {% endblock %}

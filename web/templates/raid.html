@@ -14,8 +14,20 @@
             <option value="{{ p.id }}">{{ p.name }}</option>
             {% endfor %}
         </select>
+        <button class="btn btn-outline-danger btn-sm" id="btnAiRisk" onclick="runAiRiskAnalysis()" title="AI Risk Analysis">
+            <i class="bi bi-robot me-1"></i>AI Analyze
+        </button>
         <button class="btn btn-primary btn-sm" onclick="showAddItem()"><i class="bi bi-plus-lg me-1"></i>Add Item</button>
     </div>
+</div>
+
+<!-- AI Analysis Result -->
+<div class="card mb-3" id="aiRiskCard" style="display:none;">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-robot me-1"></i>AI Risk Analysis</strong>
+        <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('aiRiskCard').style.display='none'"><i class="bi bi-x"></i></button>
+    </div>
+    <div class="card-body" id="aiRiskBody"></div>
 </div>
 
 <!-- Summary Cards -->
@@ -301,6 +313,71 @@ async function createItem() {
         loadData();
     } catch(err) {
         alert('Error creating item: ' + err.message);
+    }
+}
+
+async function runAiRiskAnalysis() {
+    var pid = document.getElementById('programSelect').value;
+    if (!pid) { alert('Select a program first.'); return; }
+    var btn = document.getElementById('btnAiRisk');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Analyzing...';
+    try {
+        var data = await apiCall('/api/programs/' + pid + '/analyze', 'POST', { analysis_type: 'risk_analysis' });
+        var r = data.results || data;
+        var card = document.getElementById('aiRiskCard');
+        var body = document.getElementById('aiRiskBody');
+
+        var score = r.overall_score || 0;
+        var scoreColor = score >= 75 ? '#198754' : score >= 50 ? '#ffc107' : '#dc3545';
+
+        var html = '<div class="d-flex align-items-center gap-3 mb-3">';
+        html += '<div style="width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.3rem;font-weight:700;background:' + scoreColor + '20;color:' + scoreColor + ';">' + Math.round(score) + '</div>';
+        html += '<div><h6 class="mb-1">Risk Management Score: ' + Math.round(score) + '/100</h6>';
+        if (r.risk_summary) html += '<p class="text-muted small mb-0">' + r.risk_summary + '</p>';
+        html += '</div></div>';
+
+        if (r.top_risks && r.top_risks.length) {
+            html += '<div class="mb-3"><h6 class="text-danger"><i class="bi bi-exclamation-triangle me-1"></i>Top Risks</h6>';
+            r.top_risks.forEach(function(risk) {
+                var sevColor = risk.severity === 'critical' ? '#dc3545' : risk.severity === 'high' ? '#fd7e14' : '#ffc107';
+                html += '<div class="cfi-detail-rec high" style="border-color:' + sevColor + ';">';
+                html += '<div class="d-flex justify-content-between"><strong>' + risk.title + '</strong>';
+                html += '<span class="badge" style="background:' + sevColor + ';">' + risk.severity + '</span></div>';
+                if (risk.impact) html += '<div class="small mt-1">' + risk.impact + '</div>';
+                if (risk.mitigation) html += '<div class="small text-muted mt-1"><i class="bi bi-shield-check me-1"></i>' + risk.mitigation + '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        if (r.patterns_identified && r.patterns_identified.length) {
+            html += '<div class="mb-3"><h6><i class="bi bi-diagram-3 me-1"></i>Patterns Identified</h6>';
+            r.patterns_identified.forEach(function(p) {
+                html += '<div class="cfi-detail-insight mb-1"><i class="bi bi-arrow-right-circle me-2 text-info"></i>' + p + '</div>';
+            });
+            html += '</div>';
+        }
+
+        if (r.recommendations && r.recommendations.length) {
+            html += '<div><h6><i class="bi bi-check2-square me-1"></i>Recommendations</h6>';
+            r.recommendations.forEach(function(rec) {
+                var p = (rec.priority || 'medium').toLowerCase();
+                var pClass = p === 'high' ? 'high' : p === 'medium' ? 'medium' : 'low';
+                html += '<div class="cfi-detail-rec ' + pClass + '"><strong>' + rec.title + '</strong>';
+                if (rec.detail) html += '<div class="small">' + rec.detail + '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        body.innerHTML = html;
+        card.style.display = '';
+    } catch(err) {
+        alert('AI analysis error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-robot me-1"></i>AI Analyze';
     }
 }
 </script>

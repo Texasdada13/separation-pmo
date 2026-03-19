@@ -55,6 +55,8 @@
 <ul class="nav nav-tabs mb-3" id="viewTabs">
     <li class="nav-item"><a class="nav-link active" href="#" onclick="switchView('detailed');return false;"><i class="bi bi-list-ul me-1"></i>Detailed</a></li>
     <li class="nav-item"><a class="nav-link" href="#" onclick="switchView('summary');return false;"><i class="bi bi-bar-chart me-1"></i>Summary</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchView('utilization');return false;"><i class="bi bi-speedometer2 me-1"></i>Utilization</a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchView('activity');return false;"><i class="bi bi-activity me-1"></i>Activity Log</a></li>
 </ul>
 
 <!-- Detailed View -->
@@ -111,6 +113,48 @@
     </div>
 </div>
 
+<!-- Utilization View -->
+<div id="utilizationView" class="d-none">
+    <div class="row g-3 mb-3">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header"><strong><i class="bi bi-graph-up me-1"></i>Weekly Effort Trend</strong></div>
+                <div class="card-body"><canvas id="weeklyTrendChart" height="260"></canvas></div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header"><strong><i class="bi bi-pie-chart me-1"></i>Activity Breakdown</strong></div>
+                <div class="card-body"><canvas id="activityPieChart" height="260"></canvas></div>
+            </div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header"><strong><i class="bi bi-people me-1"></i>Team Utilization</strong></div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead><tr><th>Person</th><th>Type</th><th>Total Hours</th><th>Billable</th><th>Avg/Week</th><th>Utilization</th></tr></thead>
+                    <tbody id="utilizationBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Activity Log View -->
+<div id="activityView" class="d-none">
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong><i class="bi bi-activity me-1"></i>Activity Log</strong>
+            <small class="text-muted">Chronological view of all work activity</small>
+        </div>
+        <div class="card-body p-0" id="activityLogBody">
+            <div class="text-center text-muted py-4">Select a program to view activity</div>
+        </div>
+    </div>
+</div>
+
 <!-- Log Time Modal -->
 <div class="modal fade" id="logTimeModal" tabindex="-1">
     <div class="modal-dialog">
@@ -157,13 +201,18 @@
 var allEntries = [];
 var filteredEntries = [];
 var workstreamChart = null;
+var weeklyTrendChart = null;
+var activityPieChart = null;
 
 function switchView(view) {
-    document.getElementById('detailedView').classList.toggle('d-none', view !== 'detailed');
-    document.getElementById('summaryView').classList.toggle('d-none', view !== 'summary');
+    ['detailedView','summaryView','utilizationView','activityView'].forEach(function(id) {
+        document.getElementById(id).classList.toggle('d-none', id !== view + 'View');
+    });
     document.querySelectorAll('#viewTabs .nav-link').forEach(function(el) { el.classList.remove('active'); });
     event.target.closest('.nav-link').classList.add('active');
     if (view === 'summary') renderSummary();
+    if (view === 'utilization') renderUtilization();
+    if (view === 'activity') renderActivityLog();
 }
 
 async function loadData() {
@@ -363,6 +412,189 @@ async function createTimeEntry() {
     } catch(err) {
         alert('Error logging time: ' + err.message);
     }
+}
+
+function renderUtilization() {
+    renderWeeklyTrend();
+    renderActivityPie();
+    renderUtilizationTable();
+}
+
+function renderWeeklyTrend() {
+    // Group entries by week
+    var byWeek = {};
+    filteredEntries.forEach(function(e) {
+        if (!e.entry_date && !e.date) return;
+        var d = new Date(e.entry_date || e.date);
+        var dayOfWeek = d.getDay();
+        var monday = new Date(d);
+        monday.setDate(d.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+        var key = monday.toISOString().split('T')[0];
+        byWeek[key] = (byWeek[key] || 0) + (parseFloat(e.hours) || 0);
+    });
+
+    var weeks = Object.keys(byWeek).sort();
+    var last12 = weeks.slice(-12);
+    var labels = last12.map(function(w) {
+        var d = new Date(w);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    });
+    var values = last12.map(function(w) { return parseFloat(byWeek[w].toFixed(1)); });
+
+    var ctx = document.getElementById('weeklyTrendChart').getContext('2d');
+    if (weeklyTrendChart) weeklyTrendChart.destroy();
+    weeklyTrendChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Hours',
+                data: values,
+                borderColor: '#3A7BD5',
+                backgroundColor: 'rgba(58,123,213,0.15)',
+                fill: true, tension: 0.3, pointRadius: 4
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, title: { display: true, text: 'Hours' } },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+}
+
+function renderActivityPie() {
+    var byCat = {};
+    filteredEntries.forEach(function(e) {
+        var cat = e.activity_category || e.activity || 'other';
+        byCat[cat] = (byCat[cat] || 0) + (parseFloat(e.hours) || 0);
+    });
+
+    var cats = Object.keys(byCat).sort(function(a, b) { return byCat[b] - byCat[a]; });
+    var colors = ['#3A7BD5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#f97316', '#06b6d4', '#C9A84C'];
+
+    var ctx = document.getElementById('activityPieChart').getContext('2d');
+    if (activityPieChart) activityPieChart.destroy();
+    activityPieChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: cats.map(function(c) { return c.charAt(0).toUpperCase() + c.slice(1); }),
+            datasets: [{
+                data: cats.map(function(c) { return parseFloat(byCat[c].toFixed(1)); }),
+                backgroundColor: colors.slice(0, cats.length),
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, cutout: '55%',
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8 } } }
+        }
+    });
+}
+
+function renderUtilizationTable() {
+    var byPerson = {};
+    var weekSet = new Set();
+    filteredEntries.forEach(function(e) {
+        var name = e.person_name || e.person || 'Unknown';
+        if (!byPerson[name]) byPerson[name] = { total: 0, billable: 0, type: e.person_type || 'internal', weeks: new Set() };
+        var hrs = parseFloat(e.hours) || 0;
+        byPerson[name].total += hrs;
+        if (e.billable) byPerson[name].billable += hrs;
+        if (e.entry_date || e.date) {
+            var d = new Date(e.entry_date || e.date);
+            var dayOfWeek = d.getDay();
+            var monday = new Date(d);
+            monday.setDate(d.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+            var wk = monday.toISOString().split('T')[0];
+            byPerson[name].weeks.add(wk);
+            weekSet.add(wk);
+        }
+    });
+
+    var people = Object.keys(byPerson).sort(function(a, b) { return byPerson[b].total - byPerson[a].total; });
+    var tbody = document.getElementById('utilizationBody');
+    if (!people.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No data</td></tr>';
+        return;
+    }
+
+    var maxHrs = Math.max.apply(null, people.map(function(p) { return byPerson[p].total; }));
+    tbody.innerHTML = people.map(function(name) {
+        var p = byPerson[name];
+        var avgPerWeek = p.weeks.size > 0 ? (p.total / p.weeks.size) : 0;
+        var utilPct = maxHrs > 0 ? Math.round(p.total / maxHrs * 100) : 0;
+        var barColor = utilPct >= 80 ? '#10b981' : utilPct >= 50 ? '#f59e0b' : '#ef4444';
+        var typeBadge = p.type === 'client' ?
+            '<span class="badge" style="background:#0dcaf0;color:#000;">Client</span>' :
+            '<span class="badge" style="background:#6f42c120;color:#6f42c1;">Internal</span>';
+
+        return '<tr>' +
+            '<td><strong>' + name + '</strong></td>' +
+            '<td>' + typeBadge + '</td>' +
+            '<td>' + p.total.toFixed(1) + 'h</td>' +
+            '<td>' + p.billable.toFixed(1) + 'h</td>' +
+            '<td>' + avgPerWeek.toFixed(1) + 'h</td>' +
+            '<td style="min-width:130px;"><div class="d-flex align-items-center gap-2">' +
+            '<div class="progress flex-fill" style="height:6px;">' +
+            '<div class="progress-bar" style="width:' + utilPct + '%;background:' + barColor + ';"></div>' +
+            '</div><small class="fw-bold" style="color:' + barColor + ';">' + utilPct + '%</small></div></td></tr>';
+    }).join('');
+}
+
+function renderActivityLog() {
+    var container = document.getElementById('activityLogBody');
+    if (!filteredEntries.length) {
+        container.innerHTML = '<div class="text-center text-muted py-4">No activity data</div>';
+        return;
+    }
+
+    // Sort by date descending and group by date
+    var sorted = filteredEntries.slice().sort(function(a, b) {
+        return (b.entry_date || b.date || '').localeCompare(a.entry_date || a.date || '');
+    });
+
+    var byDate = {};
+    sorted.forEach(function(e) {
+        var d = e.entry_date || e.date || 'Unknown';
+        if (!byDate[d]) byDate[d] = [];
+        byDate[d].push(e);
+    });
+
+    var html = '';
+    Object.keys(byDate).forEach(function(dateStr) {
+        var entries = byDate[dateStr];
+        var dayTotal = entries.reduce(function(s, e) { return s + (parseFloat(e.hours) || 0); }, 0);
+        var dt = new Date(dateStr);
+        var label = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+
+        html += '<div class="border-bottom px-3 py-2" style="background:var(--pt-bg-surface);">';
+        html += '<div class="d-flex justify-content-between"><strong>' + label + '</strong>';
+        html += '<span class="badge bg-primary">' + dayTotal.toFixed(1) + 'h</span></div></div>';
+
+        entries.forEach(function(e) {
+            var catIcon = {
+                planning: 'bi-clipboard', execution: 'bi-tools', meeting: 'bi-camera-video',
+                review: 'bi-search', documentation: 'bi-file-text', testing: 'bi-bug',
+                support: 'bi-headset', other: 'bi-three-dots'
+            };
+            var icon = catIcon[e.activity_category || e.activity] || 'bi-circle';
+            html += '<div class="px-3 py-2 border-bottom d-flex align-items-start gap-3">';
+            html += '<div class="text-muted" style="min-width:24px;"><i class="bi ' + icon + '"></i></div>';
+            html += '<div class="flex-fill">';
+            html += '<div class="d-flex justify-content-between">';
+            html += '<span><strong>' + (e.person_name || e.person || '--') + '</strong>';
+            html += ' <small class="text-muted">(' + (e.activity_category || e.activity || 'general') + ')</small></span>';
+            html += '<strong>' + (parseFloat(e.hours) || 0).toFixed(1) + 'h</strong></div>';
+            if (e.description) html += '<small class="text-muted">' + e.description + '</small>';
+            html += '</div></div>';
+        });
+    });
+
+    container.innerHTML = html;
 }
 </script>
 {% endblock %}

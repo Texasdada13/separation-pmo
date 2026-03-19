@@ -7,12 +7,26 @@
         <h2><i class="bi bi-clipboard-check me-2"></i>Day 1 / Exit Readiness</h2>
         <p class="text-muted mb-0">Track readiness checklists for Day 1 and Exit milestones</p>
     </div>
-    <select id="programSelect" class="form-select form-select-sm" style="min-width:240px;" onchange="loadData()">
-        <option value="">Select program...</option>
-        {% for p in programs %}
-        <option value="{{ p.id }}">{{ p.name }}</option>
-        {% endfor %}
-    </select>
+    <div class="d-flex gap-2">
+        <select id="programSelect" class="form-select form-select-sm" style="min-width:240px;" onchange="loadData()">
+            <option value="">Select program...</option>
+            {% for p in programs %}
+            <option value="{{ p.id }}">{{ p.name }}</option>
+            {% endfor %}
+        </select>
+        <button class="btn btn-outline-success btn-sm" id="btnAiReadiness" onclick="runAiReadiness()" title="AI Readiness Assessment">
+            <i class="bi bi-robot me-1"></i>AI Assess
+        </button>
+    </div>
+</div>
+
+<!-- AI Analysis Result -->
+<div class="card mb-3" id="aiReadinessCard" style="display:none;">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-robot me-1"></i>AI Readiness Assessment</strong>
+        <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('aiReadinessCard').style.display='none'"><i class="bi bi-x"></i></button>
+    </div>
+    <div class="card-body" id="aiReadinessBody"></div>
 </div>
 
 <!-- Summary Cards -->
@@ -172,6 +186,70 @@ function renderChecklist() {
     });
 
     container.innerHTML = html;
+}
+
+async function runAiReadiness() {
+    var pid = document.getElementById('programSelect').value;
+    if (!pid) { alert('Select a program first.'); return; }
+    var btn = document.getElementById('btnAiReadiness');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Analyzing...';
+    try {
+        var data = await apiCall('/api/programs/' + pid + '/analyze', 'POST', { analysis_type: 'readiness_assessment' });
+        var r = data.results || data;
+        var card = document.getElementById('aiReadinessCard');
+        var body = document.getElementById('aiReadinessBody');
+
+        var score = r.overall_score || 0;
+        var scoreColor = score >= 75 ? '#198754' : score >= 50 ? '#ffc107' : '#dc3545';
+        var goLabel = r.go_no_go === 'go' ? 'GO' : r.go_no_go === 'conditional_go' ? 'CONDITIONAL GO' : 'NO-GO';
+        var goBg = r.go_no_go === 'go' ? '#198754' : r.go_no_go === 'conditional_go' ? '#ffc107' : '#dc3545';
+
+        var html = '<div class="d-flex align-items-center gap-3 mb-3">';
+        html += '<div style="width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.3rem;font-weight:700;background:' + scoreColor + '20;color:' + scoreColor + ';">' + Math.round(score) + '</div>';
+        html += '<div><h6 class="mb-1">Readiness Score: ' + Math.round(score) + '/100</h6>';
+        html += '<span class="badge" style="background:' + goBg + ';font-size:0.85rem;">' + goLabel + '</span></div></div>';
+
+        if (r.readiness_by_workstream && r.readiness_by_workstream.length) {
+            html += '<div class="mb-3"><h6>Workstream Readiness</h6>';
+            r.readiness_by_workstream.forEach(function(ws) {
+                var c = ws.score >= 75 ? '#198754' : ws.score >= 50 ? '#ffc107' : '#dc3545';
+                html += '<div class="d-flex justify-content-between align-items-center mb-1"><span>' + ws.workstream + '</span><strong style="color:' + c + ';">' + ws.score + '</strong></div>';
+                html += '<div class="progress mb-2" style="height:5px;"><div class="progress-bar" style="width:' + ws.score + '%;background:' + c + ';"></div></div>';
+            });
+            html += '</div>';
+        }
+
+        if (r.critical_blockers && r.critical_blockers.length) {
+            html += '<div class="mb-3"><h6 class="text-danger"><i class="bi bi-exclamation-triangle me-1"></i>Critical Blockers</h6>';
+            r.critical_blockers.forEach(function(b) {
+                html += '<div class="cfi-detail-rec high"><strong>' + b.area + '</strong>: ' + b.blocker;
+                if (b.resolution) html += '<div class="small text-muted mt-1">Resolution: ' + b.resolution + '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        if (r.recommendations && r.recommendations.length) {
+            html += '<div><h6><i class="bi bi-check2-square me-1"></i>Recommendations</h6>';
+            r.recommendations.forEach(function(rec) {
+                var p = (rec.priority || 'medium').toLowerCase();
+                var pClass = p === 'high' ? 'high' : p === 'medium' ? 'medium' : 'low';
+                html += '<div class="cfi-detail-rec ' + pClass + '"><strong>' + rec.title + '</strong>';
+                if (rec.detail) html += '<div class="small">' + rec.detail + '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        body.innerHTML = html;
+        card.style.display = '';
+    } catch(err) {
+        alert('AI analysis error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-robot me-1"></i>AI Assess';
+    }
 }
 </script>
 {% endblock %}

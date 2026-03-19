@@ -1,6 +1,10 @@
 """Configuration settings for Separation PMO."""
 import os
 
+# Resolve project root for reliable SQLite path
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_default_db = 'sqlite:///' + os.path.join(_project_root, 'instance', 'separation_pmo.db').replace('\\', '/')
+
 
 class Config:
     """Base configuration."""
@@ -8,7 +12,7 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
     # Database
-    database_url = os.environ.get('DATABASE_URL', 'sqlite:///instance/separation_pmo.db')
+    database_url = os.environ.get('DATABASE_URL', _default_db)
     if database_url.startswith('postgres://'):
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
     SQLALCHEMY_DATABASE_URI = database_url

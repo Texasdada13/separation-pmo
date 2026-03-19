@@ -112,6 +112,15 @@
                     </div>
                 </div>
             </div>
+
+            <hr class="my-4" style="max-width:800px;margin:0 auto;">
+            <div style="max-width:800px;margin:0 auto;" class="text-center">
+                <p class="text-muted small mb-3">Want to explore the platform first?</p>
+                <button class="btn btn-outline-primary" onclick="loadDemoData()" id="loadDemoBtn">
+                    <i class="bi bi-database-add me-2"></i>Load Demo Program
+                </button>
+                <p class="text-muted small mt-2 mb-0">Creates a realistic $850M carve-out with 56 tasks, TSAs, RAID items, and more.</p>
+            </div>
         </div>
     </div>
     {% endif %}
@@ -182,6 +191,22 @@
 
 {% block extra_js %}
 <script>
+async function loadDemoData() {
+    var btn = document.getElementById('loadDemoBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Loading demo data...';
+    try {
+        var result = await apiCall('/api/seed-demo', 'POST');
+        if (result.success) {
+            window.location.reload();
+        }
+    } catch(err) {
+        alert('Error loading demo data: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-database-add me-2"></i>Load Demo Program';
+    }
+}
+
 async function createProgram() {
     var data = {
         name: document.getElementById('programName').value,

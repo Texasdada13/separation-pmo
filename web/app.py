@@ -8,7 +8,8 @@ carve-outs, divestitures, and complex transformation programs.
 import os
 import sys
 import logging
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
+from collections import defaultdict
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask_cors import CORS
 from flask_limiter import Limiter
@@ -55,6 +56,7 @@ def create_app():
             nav_sections=[
                 NavSection("COMMAND CENTER", [
                     NavItem("Dashboard", "bi-speedometer2", "/dashboard"),
+                    NavItem("Analytics", "bi-graph-up-arrow", "/analytics"),
                     NavItem("AI Advisor", "bi-robot", "/chat"),
                 ]),
                 NavSection("PROJECT MANAGEMENT", [
@@ -191,6 +193,13 @@ def create_app():
     def chat():
         programs = Program.query.order_by(Program.name).all()
         return render_template('chat.html',
+                             app_name=app.config['APP_NAME'],
+                             programs=programs)
+
+    @app.route('/analytics')
+    def analytics():
+        programs = Program.query.order_by(Program.name).all()
+        return render_template('analytics.html',
                              app_name=app.config['APP_NAME'],
                              programs=programs)
 
@@ -656,6 +665,236 @@ def create_app():
             'total_milestones': total_milestones,
             'completed_milestones': completed_milestones,
             'milestone_completion_pct': round(completed_milestones / total_milestones * 100) if total_milestones else 0,
+        })
+
+    # =============================================================================
+    # API Routes — Seed Demo Data
+    # =============================================================================
+
+    @app.route('/api/seed-demo', methods=['POST'])
+    def api_seed_demo():
+        """Load demo data via API (for onboarding)."""
+        try:
+            from scripts.seed_demo import seed
+            seed()
+            return jsonify({'success': True})
+        except Exception as e:
+            logger.error(f"Seed demo error: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    # =============================================================================
+    # API Routes — BI Analytics
+    # =============================================================================
+
+    @app.route('/api/programs/<program_id>/analytics', methods=['GET'])
+    def api_program_analytics(program_id):
+        """Aggregated BI analytics data for charts and dashboards."""
+        program = Program.query.get_or_404(program_id)
+        workstreams = Workstream.query.filter_by(program_id=program_id).order_by(Workstream.sort_order).all()
+        tasks = Task.query.filter_by(program_id=program_id).all()
+        milestones = Milestone.query.filter_by(program_id=program_id).all()
+        tsas = TSAAgreement.query.filter_by(program_id=program_id).all()
+        raid_items = RAIDItem.query.filter_by(program_id=program_id).all()
+        time_entries = TimeEntry.query.filter_by(program_id=program_id).all()
+        readiness = ReadinessItem.query.filter_by(program_id=program_id).all()
+
+        ws_map = {w.id: w.name for w in workstreams}
+
+        # --- Workstream heatmap data ---
+        ws_heatmap = []
+        for ws in workstreams:
+            ws_tasks = [t for t in tasks if t.workstream_id == ws.id]
+            total = len(ws_tasks)
+            done = sum(1 for t in ws_tasks if t.status == 'complete')
+            blocked = sum(1 for t in ws_tasks if t.status == 'blocked')
+            in_prog = sum(1 for t in ws_tasks if t.status == 'in_progress')
+            ws_heatmap.append({
+                'name': ws.name, 'status': ws.status,
+                'percent_complete': ws.percent_complete or 0,
+                'total_tasks': total, 'completed': done,
+                'in_progress': in_prog, 'blocked': blocked,
+                'lead': ws.lead_name,
+            })
+
+        # --- Task velocity (tasks completed per week, last 12 weeks) ---
+        today = date.today()
+        velocity = []
+        for i in range(11, -1, -1):
+            week_end = today - timedelta(days=today.weekday()) - timedelta(weeks=i-1)
+            week_start = week_end - timedelta(days=7)
+            count = sum(1 for t in tasks
+                       if t.completed_date and week_start <= t.completed_date < week_end)
+            velocity.append({
+                'week': week_start.strftime('%b %d'),
+                'completed': count,
+            })
+
+        # --- Task status distribution ---
+        status_dist = defaultdict(int)
+        for t in tasks:
+            status_dist[t.status] += 1
+
+        # --- Priority distribution ---
+        priority_dist = defaultdict(int)
+        for t in tasks:
+            priority_dist[t.priority] += 1
+
+        # --- TSA analytics ---
+        tsa_by_category = defaultdict(lambda: {'count': 0, 'monthly_cost': 0, 'active': 0, 'exited': 0})
+        tsa_exit_timeline = []
+        for t in tsas:
+            cat = t.category or 'Other'
+            tsa_by_category[cat]['count'] += 1
+            tsa_by_category[cat]['monthly_cost'] += (t.monthly_cost or 0)
+            if t.status == 'exited':
+                tsa_by_category[cat]['exited'] += 1
+            else:
+                tsa_by_category[cat]['active'] += 1
+            tsa_exit_timeline.append({
+                'service': t.service_name, 'category': cat,
+                'exit_date': t.exit_date.isoformat() if t.exit_date else None,
+                'status': t.status, 'monthly_cost': t.monthly_cost or 0,
+                'readiness': t.exit_readiness_score or 0,
+            })
+
+        # TSA cost burn-down (monthly projection)
+        tsa_cost_burndown = []
+        active_tsas_list = [t for t in tsas if t.status != 'exited']
+        if active_tsas_list:
+            start_month = today.replace(day=1)
+            for m in range(12):
+                month_date = start_month + timedelta(days=30 * m)
+                monthly_total = sum(
+                    (t.monthly_cost or 0) for t in active_tsas_list
+                    if not t.exit_date or t.exit_date > month_date
+                )
+                tsa_cost_burndown.append({
+                    'month': month_date.strftime('%b %Y'),
+                    'cost': round(monthly_total, 2),
+                })
+
+        # --- RAID analytics ---
+        raid_by_type = defaultdict(lambda: {'open': 0, 'closed': 0, 'total': 0})
+        risk_heatmap = []  # impact x likelihood matrix
+        raid_by_ws = defaultdict(int)
+        raid_aging = {'0-7': 0, '8-14': 0, '15-30': 0, '30+': 0}
+
+        for item in raid_items:
+            raid_by_type[item.item_type]['total'] += 1
+            if item.status in ('open', 'in_progress', 'escalated'):
+                raid_by_type[item.item_type]['open'] += 1
+                # Aging
+                if item.raised_date:
+                    age = (today - item.raised_date).days
+                    if age <= 7:
+                        raid_aging['0-7'] += 1
+                    elif age <= 14:
+                        raid_aging['8-14'] += 1
+                    elif age <= 30:
+                        raid_aging['15-30'] += 1
+                    else:
+                        raid_aging['30+'] += 1
+            else:
+                raid_by_type[item.item_type]['closed'] += 1
+
+            if item.workstream_id:
+                raid_by_ws[ws_map.get(item.workstream_id, 'Unknown')] += 1
+
+            if item.item_type == 'risk' and item.impact_score and item.likelihood_score:
+                risk_heatmap.append({
+                    'title': item.title, 'impact': item.impact_score,
+                    'likelihood': item.likelihood_score,
+                    'score': item.risk_score or (item.impact_score * item.likelihood_score),
+                    'status': item.status,
+                })
+
+        # --- Effort analytics ---
+        effort_by_ws = defaultdict(lambda: {'internal': 0, 'client': 0})
+        effort_by_person = defaultdict(lambda: {'hours': 0, 'billable': 0})
+        effort_by_category = defaultdict(float)
+        effort_by_week = []
+
+        for e in time_entries:
+            ws_name = ws_map.get(e.workstream_id, 'Unassigned')
+            effort_by_ws[ws_name][e.person_type or 'internal'] += (e.hours or 0)
+            effort_by_person[e.person_name]['hours'] += (e.hours or 0)
+            if e.billable:
+                effort_by_person[e.person_name]['billable'] += (e.hours or 0)
+            effort_by_category[e.activity_category or 'other'] += (e.hours or 0)
+
+        # Effort by week (last 12 weeks)
+        for i in range(11, -1, -1):
+            week_end = today - timedelta(days=today.weekday()) - timedelta(weeks=i-1)
+            week_start = week_end - timedelta(days=7)
+            week_hours = sum(
+                (e.hours or 0) for e in time_entries
+                if e.entry_date and week_start <= e.entry_date < week_end
+            )
+            effort_by_week.append({
+                'week': week_start.strftime('%b %d'),
+                'hours': round(week_hours, 1),
+            })
+
+        # --- Readiness analytics ---
+        readiness_by_ws = defaultdict(lambda: {'ready': 0, 'total': 0, 'critical_ready': 0, 'critical_total': 0})
+        for r in readiness:
+            ws_name = ws_map.get(r.workstream_id, 'Unassigned')
+            readiness_by_ws[ws_name]['total'] += 1
+            if r.status == 'ready':
+                readiness_by_ws[ws_name]['ready'] += 1
+            if r.is_critical:
+                readiness_by_ws[ws_name]['critical_total'] += 1
+                if r.status == 'ready':
+                    readiness_by_ws[ws_name]['critical_ready'] += 1
+
+        # --- Milestones analytics ---
+        ms_on_track = sum(1 for m in milestones if m.status in ('upcoming', 'on_track'))
+        ms_at_risk = sum(1 for m in milestones if m.status == 'at_risk')
+        ms_complete = sum(1 for m in milestones if m.status == 'complete')
+        ms_missed = sum(1 for m in milestones if m.status == 'missed')
+
+        # --- Executive scorecard ---
+        total_tasks = len(tasks)
+        completed_tasks = sum(1 for t in tasks if t.status == 'complete')
+        total_ms = len(milestones)
+        completed_ms = sum(1 for m in milestones if m.status == 'complete')
+        total_readiness = len(readiness)
+        ready_items = sum(1 for r in readiness if r.status == 'ready')
+        total_tsas = len(tsas)
+        exited_tsas = sum(1 for t in tsas if t.status == 'exited')
+
+        return jsonify({
+            'program': program.to_dict(),
+            'workstream_heatmap': ws_heatmap,
+            'task_velocity': velocity,
+            'task_status': dict(status_dist),
+            'task_priority': dict(priority_dist),
+            'tsa_by_category': {k: dict(v) for k, v in tsa_by_category.items()},
+            'tsa_exit_timeline': sorted(tsa_exit_timeline, key=lambda x: x['exit_date'] or ''),
+            'tsa_cost_burndown': tsa_cost_burndown,
+            'raid_by_type': {k: dict(v) for k, v in raid_by_type.items()},
+            'risk_heatmap': risk_heatmap,
+            'raid_by_workstream': dict(raid_by_ws),
+            'raid_aging': raid_aging,
+            'effort_by_workstream': {k: dict(v) for k, v in effort_by_ws.items()},
+            'effort_by_person': {k: dict(v) for k, v in effort_by_person.items()},
+            'effort_by_category': dict(effort_by_category),
+            'effort_by_week': effort_by_week,
+            'readiness_by_workstream': {k: dict(v) for k, v in readiness_by_ws.items()},
+            'milestones': {
+                'on_track': ms_on_track, 'at_risk': ms_at_risk,
+                'complete': ms_complete, 'missed': ms_missed,
+            },
+            'scorecard': {
+                'task_pct': round(completed_tasks / total_tasks * 100) if total_tasks else 0,
+                'milestone_pct': round(completed_ms / total_ms * 100) if total_ms else 0,
+                'readiness_pct': round(ready_items / total_readiness * 100) if total_readiness else 0,
+                'tsa_exit_pct': round(exited_tsas / total_tsas * 100) if total_tsas else 0,
+                'health_score': program.overall_health_score or 0,
+                'open_risks': raid_by_type['risk']['open'],
+                'open_issues': raid_by_type['issue']['open'],
+                'total_effort_hours': round(sum(e.hours or 0 for e in time_entries), 1),
+            },
         })
 
     return app

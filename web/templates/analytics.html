@@ -1,0 +1,802 @@
+{% extends "base.html" %}
+{% block title %}Analytics - {{ app_name }}{% endblock %}
+{% block page_title %}Business Intelligence{% endblock %}
+{% block content %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="bi bi-graph-up-arrow me-2"></i>Business Intelligence</h2>
+            <p class="text-muted mb-0">Power BI-style analytics across your separation program</p>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <select id="programSelect" class="form-select" style="width:auto;">
+                <option value="">Select Program</option>
+                {% for p in programs %}
+                <option value="{{ p.id }}">{{ p.name }}</option>
+                {% endfor %}
+            </select>
+            <button class="btn btn-outline-primary btn-sm" onclick="window.print()" title="Print / Export PDF">
+                <i class="bi bi-printer me-1"></i>Export
+            </button>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <div id="analyticsLoading" class="text-center py-5" style="display:none;">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="text-muted mt-2">Loading analytics data...</p>
+    </div>
+
+    <!-- Empty State -->
+    <div id="analyticsEmpty" class="text-center py-5">
+        <i class="bi bi-bar-chart-line" style="font-size:3rem;color:var(--cfi-primary);"></i>
+        <h4 class="mt-3">Select a Program</h4>
+        <p class="text-muted">Choose a program above to view business intelligence dashboards.</p>
+    </div>
+
+    <!-- Dashboard Content (hidden until data loads) -->
+    <div id="analyticsContent" style="display:none;">
+
+        <!-- ============================================================ -->
+        <!-- SECTION 1: Executive Scorecard                               -->
+        <!-- ============================================================ -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-speedometer2 me-2"></i>Executive Scorecard</h5>
+                <span class="badge bg-primary" id="scorecardProgram"></span>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-6 col-md-3 col-lg">
+                        <div class="card metric-card h-100">
+                            <div class="metric-value" id="scHealthScore" style="color:var(--cfi-primary);">--</div>
+                            <div class="metric-label">Health Score</div>
+                            <div class="progress mt-2" style="height:4px;"><div class="progress-bar" id="scHealthBar"></div></div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 col-lg">
+                        <div class="card metric-card h-100">
+                            <div class="metric-value" id="scTaskPct">--</div>
+                            <div class="metric-label">Tasks Complete</div>
+                            <div class="progress mt-2" style="height:4px;"><div class="progress-bar bg-success" id="scTaskBar"></div></div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 col-lg">
+                        <div class="card metric-card h-100">
+                            <div class="metric-value" id="scMilestonePct">--</div>
+                            <div class="metric-label">Milestones Hit</div>
+                            <div class="progress mt-2" style="height:4px;"><div class="progress-bar bg-info" id="scMilestoneBar"></div></div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 col-lg">
+                        <div class="card metric-card h-100">
+                            <div class="metric-value" id="scReadinessPct">--</div>
+                            <div class="metric-label">Readiness</div>
+                            <div class="progress mt-2" style="height:4px;"><div class="progress-bar bg-warning" id="scReadinessBar"></div></div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 col-lg">
+                        <div class="card metric-card h-100">
+                            <div class="metric-value" id="scTsaPct">--</div>
+                            <div class="metric-label">TSAs Exited</div>
+                            <div class="progress mt-2" style="height:4px;"><div class="progress-bar" id="scTsaBar" style="background:var(--cfi-accent);"></div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row g-3 mt-1">
+                    <div class="col-4 col-md-2">
+                        <div class="text-center">
+                            <div class="fw-bold text-danger" id="scOpenRisks" style="font-size:1.5rem;">--</div>
+                            <small class="text-muted">Open Risks</small>
+                        </div>
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <div class="text-center">
+                            <div class="fw-bold text-warning" id="scOpenIssues" style="font-size:1.5rem;">--</div>
+                            <small class="text-muted">Open Issues</small>
+                        </div>
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <div class="text-center">
+                            <div class="fw-bold" id="scTotalHours" style="font-size:1.5rem;color:var(--cfi-primary);">--</div>
+                            <small class="text-muted">Total Hours</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- SECTION 2: Program Analytics                                 -->
+        <!-- ============================================================ -->
+        <div class="row g-4 mb-4">
+            <!-- Workstream Heatmap -->
+            <div class="col-lg-8">
+                <div class="card h-100">
+                    <div class="card-header"><h6 class="mb-0"><i class="bi bi-grid-3x3 me-2"></i>Workstream Performance Heatmap</h6></div>
+                    <div class="card-body">
+                        <div id="wsHeatmapContainer"></div>
+                    </div>
+                </div>
+            </div>
+            <!-- Task Status Donut -->
+            <div class="col-lg-4">
+                <div class="card h-100">
+                    <div class="card-header"><h6 class="mb-0"><i class="bi bi-pie-chart me-2"></i>Task Status</h6></div>
+                    <div class="card-body d-flex align-items-center justify-content-center">
+                        <canvas id="taskStatusChart" style="max-height:280px;"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+            <!-- Task Velocity -->
+            <div class="col-lg-6">
+                <div class="card h-100">
+                    <div class="card-header"><h6 class="mb-0"><i class="bi bi-lightning me-2"></i>Task Completion Velocity (12 Weeks)</h6></div>
+                    <div class="card-body">
+                        <canvas id="velocityChart" style="max-height:280px;"></canvas>
+                    </div>
+                </div>
+            </div>
+            <!-- Priority Distribution -->
+            <div class="col-lg-6">
+                <div class="card h-100">
+                    <div class="card-header"><h6 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Milestone Status</h6></div>
+                    <div class="card-body d-flex align-items-center justify-content-center">
+                        <canvas id="milestoneChart" style="max-height:280px;"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- SECTION 3: TSA Analytics                                     -->
+        <!-- ============================================================ -->
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-file-earmark-text me-2"></i>TSA Analytics</h5></div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <!-- Cost Burn-Down -->
+                    <div class="col-lg-6">
+                        <h6 class="text-muted mb-3"><i class="bi bi-graph-down me-1"></i>Monthly Cost Burn-Down</h6>
+                        <canvas id="tsaCostChart" style="max-height:280px;"></canvas>
+                    </div>
+                    <!-- TSA by Category -->
+                    <div class="col-lg-6">
+                        <h6 class="text-muted mb-3"><i class="bi bi-diagram-3 me-1"></i>TSA Cost by Category</h6>
+                        <canvas id="tsaCategoryChart" style="max-height:280px;"></canvas>
+                    </div>
+                </div>
+                <!-- TSA Exit Timeline -->
+                <div class="mt-4">
+                    <h6 class="text-muted mb-3"><i class="bi bi-calendar-range me-1"></i>TSA Exit Timeline</h6>
+                    <div id="tsaTimelineContainer" style="overflow-x:auto;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- SECTION 4: RAID Analytics                                    -->
+        <!-- ============================================================ -->
+        <div class="row g-4 mb-4">
+            <!-- Risk Heat Map -->
+            <div class="col-lg-6">
+                <div class="card h-100">
+                    <div class="card-header"><h6 class="mb-0"><i class="bi bi-exclamation-diamond me-2"></i>Risk Heat Map (Impact x Likelihood)</h6></div>
+                    <div class="card-body">
+                        <div id="riskHeatmapContainer"></div>
+                    </div>
+                </div>
+            </div>
+            <!-- RAID Summary -->
+            <div class="col-lg-6">
+                <div class="card h-100">
+                    <div class="card-header"><h6 class="mb-0"><i class="bi bi-bar-chart-steps me-2"></i>RAID Summary</h6></div>
+                    <div class="card-body">
+                        <div class="row g-3 mb-3">
+                            <div class="col-6">
+                                <canvas id="raidTypeChart" style="max-height:220px;"></canvas>
+                            </div>
+                            <div class="col-6">
+                                <canvas id="raidAgingChart" style="max-height:220px;"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- SECTION 5: Work Effort Analytics                             -->
+        <!-- ============================================================ -->
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Work Effort Analytics</h5></div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <!-- Effort by Workstream -->
+                    <div class="col-lg-6">
+                        <h6 class="text-muted mb-3"><i class="bi bi-bar-chart me-1"></i>Effort by Workstream (Internal vs Client)</h6>
+                        <canvas id="effortWsChart" style="max-height:300px;"></canvas>
+                    </div>
+                    <!-- Effort by Week -->
+                    <div class="col-lg-6">
+                        <h6 class="text-muted mb-3"><i class="bi bi-graph-up me-1"></i>Weekly Effort Trend</h6>
+                        <canvas id="effortWeekChart" style="max-height:300px;"></canvas>
+                    </div>
+                </div>
+                <div class="row g-4 mt-2">
+                    <!-- Effort by Category -->
+                    <div class="col-lg-4">
+                        <h6 class="text-muted mb-3"><i class="bi bi-pie-chart me-1"></i>Activity Breakdown</h6>
+                        <canvas id="effortCategoryChart" style="max-height:250px;"></canvas>
+                    </div>
+                    <!-- Utilization Table -->
+                    <div class="col-lg-8">
+                        <h6 class="text-muted mb-3"><i class="bi bi-people me-1"></i>Team Utilization</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm" id="utilizationTable">
+                                <thead><tr><th>Person</th><th>Total Hours</th><th>Billable</th><th>Utilization</th><th></th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- SECTION 6: Readiness by Workstream                           -->
+        <!-- ============================================================ -->
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-door-open me-2"></i>Readiness by Workstream</h5></div>
+            <div class="card-body">
+                <canvas id="readinessChart" style="max-height:300px;"></canvas>
+            </div>
+        </div>
+
+    </div><!-- end analyticsContent -->
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    // Chart instances for cleanup
+    var charts = {};
+
+    var programSelect = document.getElementById('programSelect');
+    programSelect.addEventListener('change', function() {
+        if (this.value) loadAnalytics(this.value);
+    });
+
+    // Auto-select first program
+    if (programSelect.options.length === 2) {
+        programSelect.selectedIndex = 1;
+        loadAnalytics(programSelect.value);
+    }
+
+    async function loadAnalytics(programId) {
+        document.getElementById('analyticsEmpty').style.display = 'none';
+        document.getElementById('analyticsContent').style.display = 'none';
+        document.getElementById('analyticsLoading').style.display = 'block';
+
+        try {
+            var data = await apiCall('/api/programs/' + programId + '/analytics');
+            document.getElementById('analyticsLoading').style.display = 'none';
+            document.getElementById('analyticsContent').style.display = 'block';
+            renderAll(data);
+        } catch(err) {
+            document.getElementById('analyticsLoading').style.display = 'none';
+            document.getElementById('analyticsEmpty').style.display = 'block';
+            document.getElementById('analyticsEmpty').innerHTML =
+                '<i class="bi bi-exclamation-triangle text-danger" style="font-size:2rem;"></i>' +
+                '<p class="text-danger mt-2">Failed to load analytics: ' + err.message + '</p>';
+        }
+    }
+
+    function destroyChart(name) {
+        if (charts[name]) { charts[name].destroy(); charts[name] = null; }
+    }
+
+    function chartColors() {
+        var isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+        return {
+            grid: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+            text: isDark ? '#c9d1d9' : '#374151',
+            blue: '#3A7BD5', green: '#10b981', yellow: '#f59e0b',
+            red: '#ef4444', purple: '#8b5cf6', orange: '#f97316',
+            cyan: '#06b6d4', gold: '#C9A84C',
+        };
+    }
+
+    function renderAll(d) {
+        renderScorecard(d.scorecard, d.program);
+        renderHeatmap(d.workstream_heatmap);
+        renderTaskStatus(d.task_status);
+        renderVelocity(d.task_velocity);
+        renderMilestones(d.milestones);
+        renderTsaCost(d.tsa_cost_burndown);
+        renderTsaCategory(d.tsa_by_category);
+        renderTsaTimeline(d.tsa_exit_timeline);
+        renderRiskHeatmap(d.risk_heatmap);
+        renderRaidType(d.raid_by_type);
+        renderRaidAging(d.raid_aging);
+        renderEffortWs(d.effort_by_workstream);
+        renderEffortWeek(d.effort_by_week);
+        renderEffortCategory(d.effort_by_category);
+        renderUtilization(d.effort_by_person);
+        renderReadiness(d.readiness_by_workstream);
+    }
+
+    // ---- Executive Scorecard ----
+    function renderScorecard(sc, prog) {
+        document.getElementById('scorecardProgram').textContent = prog.name;
+
+        var healthColor = sc.health_score >= 80 ? '#10b981' : sc.health_score >= 60 ? '#f59e0b' : '#ef4444';
+        document.getElementById('scHealthScore').textContent = Math.round(sc.health_score);
+        document.getElementById('scHealthScore').style.color = healthColor;
+        document.getElementById('scHealthBar').style.width = sc.health_score + '%';
+        document.getElementById('scHealthBar').style.background = healthColor;
+
+        setScorecard('scTaskPct', 'scTaskBar', sc.task_pct);
+        setScorecard('scMilestonePct', 'scMilestoneBar', sc.milestone_pct);
+        setScorecard('scReadinessPct', 'scReadinessBar', sc.readiness_pct);
+        setScorecard('scTsaPct', 'scTsaBar', sc.tsa_exit_pct);
+
+        document.getElementById('scOpenRisks').textContent = sc.open_risks;
+        document.getElementById('scOpenIssues').textContent = sc.open_issues;
+        document.getElementById('scTotalHours').textContent = sc.total_effort_hours.toLocaleString();
+    }
+
+    function setScorecard(valueId, barId, pct) {
+        document.getElementById(valueId).textContent = pct + '%';
+        document.getElementById(barId).style.width = pct + '%';
+    }
+
+    // ---- Workstream Heatmap ----
+    function renderHeatmap(data) {
+        var c = document.getElementById('wsHeatmapContainer');
+        if (!data || !data.length) { c.innerHTML = '<p class="text-muted">No workstream data</p>'; return; }
+
+        var html = '<div class="table-responsive"><table class="table table-sm align-middle mb-0">';
+        html += '<thead><tr><th>Workstream</th><th>Lead</th><th>Progress</th><th>Tasks</th><th>Status</th></tr></thead><tbody>';
+
+        data.forEach(function(ws) {
+            var pct = Math.round(ws.percent_complete);
+            var barColor = ws.status === 'behind' ? '#ef4444' : ws.status === 'at_risk' ? '#f59e0b' : '#10b981';
+            var statusBadge = ws.status === 'behind' ? 'bg-danger' :
+                              ws.status === 'at_risk' ? 'bg-warning text-dark' :
+                              ws.status === 'complete' ? 'bg-success' : 'bg-info';
+
+            html += '<tr>';
+            html += '<td><strong>' + ws.name + '</strong></td>';
+            html += '<td><small class="text-muted">' + (ws.lead || '—') + '</small></td>';
+            html += '<td style="min-width:160px;">' +
+                '<div class="d-flex align-items-center gap-2">' +
+                '<div class="progress flex-fill" style="height:8px;border-radius:4px;">' +
+                '<div class="progress-bar" style="width:' + pct + '%;background:' + barColor + ';border-radius:4px;"></div></div>' +
+                '<small class="fw-bold" style="min-width:35px;">' + pct + '%</small></div></td>';
+            html += '<td><small>' + ws.completed + '/' + ws.total_tasks +
+                (ws.blocked > 0 ? ' <span class="text-danger">(' + ws.blocked + ' blocked)</span>' : '') +
+                '</small></td>';
+            html += '<td><span class="badge ' + statusBadge + '">' + ws.status.replace('_', ' ') + '</span></td>';
+            html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+        c.innerHTML = html;
+    }
+
+    // ---- Task Status Donut ----
+    function renderTaskStatus(data) {
+        destroyChart('taskStatus');
+        var c = chartColors();
+        var labels = ['Not Started', 'In Progress', 'Complete', 'Blocked', 'Cancelled'];
+        var keys = ['not_started', 'in_progress', 'complete', 'blocked', 'cancelled'];
+        var colors = ['#6b7280', c.blue, c.green, c.red, '#9ca3af'];
+        var values = keys.map(function(k) { return data[k] || 0; });
+
+        charts.taskStatus = new Chart(document.getElementById('taskStatusChart'), {
+            type: 'doughnut',
+            data: { labels: labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0 }] },
+            options: {
+                responsive: true, maintainAspectRatio: true,
+                cutout: '60%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: c.text, padding: 12 } },
+                },
+            }
+        });
+    }
+
+    // ---- Task Velocity ----
+    function renderVelocity(data) {
+        destroyChart('velocity');
+        var c = chartColors();
+        charts.velocity = new Chart(document.getElementById('velocityChart'), {
+            type: 'bar',
+            data: {
+                labels: data.map(function(d) { return d.week; }),
+                datasets: [{
+                    label: 'Tasks Completed',
+                    data: data.map(function(d) { return d.completed; }),
+                    backgroundColor: c.blue + '99',
+                    borderColor: c.blue,
+                    borderWidth: 1, borderRadius: 4,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: true,
+                scales: {
+                    y: { beginAtZero: true, ticks: { color: c.text, stepSize: 1 }, grid: { color: c.grid } },
+                    x: { ticks: { color: c.text }, grid: { display: false } },
+                },
+                plugins: { legend: { display: false } },
+            }
+        });
+    }
+
+    // ---- Milestones ----
+    function renderMilestones(data) {
+        destroyChart('milestone');
+        var c = chartColors();
+        charts.milestone = new Chart(document.getElementById('milestoneChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['On Track', 'At Risk', 'Complete', 'Missed'],
+                datasets: [{
+                    data: [data.on_track, data.at_risk, data.complete, data.missed],
+                    backgroundColor: [c.blue, c.yellow, c.green, c.red],
+                    borderWidth: 0,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: true, cutout: '55%',
+                plugins: { legend: { position: 'bottom', labels: { color: c.text, padding: 12 } } },
+            }
+        });
+    }
+
+    // ---- TSA Cost Burn-Down ----
+    function renderTsaCost(data) {
+        destroyChart('tsaCost');
+        if (!data || !data.length) return;
+        var c = chartColors();
+        charts.tsaCost = new Chart(document.getElementById('tsaCostChart'), {
+            type: 'line',
+            data: {
+                labels: data.map(function(d) { return d.month; }),
+                datasets: [{
+                    label: 'Monthly TSA Cost',
+                    data: data.map(function(d) { return d.cost; }),
+                    borderColor: c.red,
+                    backgroundColor: c.red + '20',
+                    fill: true, tension: 0.3, pointRadius: 4,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            color: c.text,
+                            callback: function(v) { return '$' + (v >= 1000 ? (v/1000).toFixed(0) + 'K' : v); }
+                        },
+                        grid: { color: c.grid },
+                    },
+                    x: { ticks: { color: c.text }, grid: { display: false } },
+                },
+                plugins: { legend: { display: false } },
+            }
+        });
+    }
+
+    // ---- TSA by Category ----
+    function renderTsaCategory(data) {
+        destroyChart('tsaCategory');
+        var c = chartColors();
+        var cats = Object.keys(data);
+        var colors = [c.blue, c.green, c.yellow, c.red, c.purple, c.orange, c.cyan, c.gold];
+
+        charts.tsaCategory = new Chart(document.getElementById('tsaCategoryChart'), {
+            type: 'bar',
+            data: {
+                labels: cats,
+                datasets: [
+                    {
+                        label: 'Monthly Cost ($)',
+                        data: cats.map(function(k) { return data[k].monthly_cost; }),
+                        backgroundColor: colors.slice(0, cats.length).map(function(cl) { return cl + '99'; }),
+                        borderColor: colors.slice(0, cats.length),
+                        borderWidth: 1, borderRadius: 4,
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: true, indexAxis: 'y',
+                scales: {
+                    x: {
+                        ticks: {
+                            color: c.text,
+                            callback: function(v) { return '$' + (v >= 1000 ? (v/1000).toFixed(0) + 'K' : v); }
+                        },
+                        grid: { color: c.grid },
+                    },
+                    y: { ticks: { color: c.text }, grid: { display: false } },
+                },
+                plugins: { legend: { display: false } },
+            }
+        });
+    }
+
+    // ---- TSA Exit Timeline ----
+    function renderTsaTimeline(data) {
+        var c = document.getElementById('tsaTimelineContainer');
+        if (!data || !data.length) { c.innerHTML = '<p class="text-muted">No TSA data</p>'; return; }
+
+        var html = '<table class="table table-sm align-middle mb-0">';
+        html += '<thead><tr><th>Service</th><th>Category</th><th>Exit Date</th><th>Monthly Cost</th><th>Readiness</th><th>Status</th></tr></thead><tbody>';
+        data.forEach(function(t) {
+            var statusClass = t.status === 'exited' ? 'bg-success' :
+                              t.status === 'exiting' ? 'bg-warning text-dark' :
+                              t.status === 'extended' ? 'bg-danger' : 'bg-info';
+            var readyColor = t.readiness >= 80 ? '#10b981' : t.readiness >= 50 ? '#f59e0b' : '#ef4444';
+            html += '<tr>';
+            html += '<td><strong>' + t.service + '</strong></td>';
+            html += '<td><small>' + (t.category || '—') + '</small></td>';
+            html += '<td>' + (t.exit_date || '—') + '</td>';
+            html += '<td>$' + (t.monthly_cost || 0).toLocaleString() + '</td>';
+            html += '<td><span style="color:' + readyColor + ';font-weight:600;">' + Math.round(t.readiness) + '%</span></td>';
+            html += '<td><span class="badge ' + statusClass + '">' + t.status + '</span></td>';
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+        c.innerHTML = html;
+    }
+
+    // ---- Risk Heat Map (5x5) ----
+    function renderRiskHeatmap(data) {
+        var c = document.getElementById('riskHeatmapContainer');
+        if (!data || !data.length) { c.innerHTML = '<p class="text-muted">No risk data with impact/likelihood scores</p>'; return; }
+
+        // Build 5x5 grid
+        var grid = {};
+        for (var i = 1; i <= 5; i++) for (var j = 1; j <= 5; j++) grid[i + ',' + j] = [];
+        data.forEach(function(r) { var key = r.impact + ',' + r.likelihood; if (grid[key]) grid[key].push(r); });
+
+        var html = '<table class="table table-bordered text-center mb-0" style="table-layout:fixed;">';
+        html += '<thead><tr><th style="width:80px;"></th>';
+        for (var l = 1; l <= 5; l++) html += '<th>L' + l + '</th>';
+        html += '</tr></thead><tbody>';
+
+        for (var imp = 5; imp >= 1; imp--) {
+            html += '<tr><th>I' + imp + '</th>';
+            for (var lik = 1; lik <= 5; lik++) {
+                var items = grid[imp + ',' + lik];
+                var score = imp * lik;
+                var bg = score >= 15 ? 'rgba(239,68,68,0.3)' :
+                         score >= 9 ? 'rgba(245,158,11,0.3)' :
+                         score >= 4 ? 'rgba(59,130,246,0.3)' : 'rgba(16,185,129,0.2)';
+                html += '<td style="background:' + bg + ';position:relative;" title="Impact ' + imp + ' x Likelihood ' + lik + '">';
+                if (items.length > 0) {
+                    html += '<span class="fw-bold" style="font-size:1.1rem;">' + items.length + '</span>';
+                    html += '<div style="font-size:0.65rem;line-height:1.2;max-height:40px;overflow:hidden;">';
+                    items.slice(0, 2).forEach(function(r) {
+                        html += '<div class="text-truncate" style="max-width:100%;">' + r.title + '</div>';
+                    });
+                    if (items.length > 2) html += '<div>+' + (items.length - 2) + ' more</div>';
+                    html += '</div>';
+                }
+                html += '</td>';
+            }
+            html += '</tr>';
+        }
+        html += '</tbody></table>';
+        html += '<div class="d-flex gap-3 mt-2 justify-content-center"><small><span style="display:inline-block;width:12px;height:12px;background:rgba(239,68,68,0.3);border-radius:2px;"></span> Critical (15-25)</small>';
+        html += '<small><span style="display:inline-block;width:12px;height:12px;background:rgba(245,158,11,0.3);border-radius:2px;"></span> High (9-14)</small>';
+        html += '<small><span style="display:inline-block;width:12px;height:12px;background:rgba(59,130,246,0.3);border-radius:2px;"></span> Medium (4-8)</small>';
+        html += '<small><span style="display:inline-block;width:12px;height:12px;background:rgba(16,185,129,0.2);border-radius:2px;"></span> Low (1-3)</small></div>';
+        c.innerHTML = html;
+    }
+
+    // ---- RAID by Type ----
+    function renderRaidType(data) {
+        destroyChart('raidType');
+        var c = chartColors();
+        var types = ['risk', 'action', 'issue', 'decision'];
+        var labels = ['Risks', 'Actions', 'Issues', 'Decisions'];
+        var colors = [c.red, c.blue, c.yellow, c.purple];
+
+        charts.raidType = new Chart(document.getElementById('raidTypeChart'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Open', data: types.map(function(t) { return (data[t] || {}).open || 0; }),
+                        backgroundColor: colors.map(function(cl) { return cl + '99'; }),
+                        borderColor: colors, borderWidth: 1, borderRadius: 4,
+                    },
+                    {
+                        label: 'Closed', data: types.map(function(t) { return (data[t] || {}).closed || 0; }),
+                        backgroundColor: colors.map(function(cl) { return cl + '33'; }),
+                        borderColor: colors.map(function(cl) { return cl + '66'; }), borderWidth: 1, borderRadius: 4,
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: true,
+                scales: {
+                    y: { beginAtZero: true, stacked: true, ticks: { color: c.text, stepSize: 1 }, grid: { color: c.grid } },
+                    x: { stacked: true, ticks: { color: c.text }, grid: { display: false } },
+                },
+                plugins: { legend: { position: 'bottom', labels: { color: c.text, boxWidth: 12, padding: 8 } } },
+            }
+        });
+    }
+
+    // ---- RAID Aging ----
+    function renderRaidAging(data) {
+        destroyChart('raidAging');
+        var c = chartColors();
+        charts.raidAging = new Chart(document.getElementById('raidAgingChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['0-7 days', '8-14 days', '15-30 days', '30+ days'],
+                datasets: [{
+                    data: [data['0-7'], data['8-14'], data['15-30'], data['30+']],
+                    backgroundColor: [c.green, c.blue, c.yellow, c.red],
+                    borderWidth: 0,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: true, cutout: '55%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: c.text, boxWidth: 12, padding: 8 } },
+                    title: { display: true, text: 'Open Item Aging', color: c.text },
+                },
+            }
+        });
+    }
+
+    // ---- Effort by Workstream ----
+    function renderEffortWs(data) {
+        destroyChart('effortWs');
+        var c = chartColors();
+        var ws = Object.keys(data);
+
+        charts.effortWs = new Chart(document.getElementById('effortWsChart'), {
+            type: 'bar',
+            data: {
+                labels: ws,
+                datasets: [
+                    {
+                        label: 'Internal', data: ws.map(function(k) { return data[k].internal; }),
+                        backgroundColor: c.blue + '99', borderColor: c.blue, borderWidth: 1, borderRadius: 4,
+                    },
+                    {
+                        label: 'Client', data: ws.map(function(k) { return data[k].client; }),
+                        backgroundColor: c.gold + '99', borderColor: c.gold, borderWidth: 1, borderRadius: 4,
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: true,
+                scales: {
+                    y: { beginAtZero: true, stacked: true, ticks: { color: c.text }, grid: { color: c.grid } },
+                    x: { stacked: true, ticks: { color: c.text, maxRotation: 45 }, grid: { display: false } },
+                },
+                plugins: { legend: { position: 'bottom', labels: { color: c.text, boxWidth: 12, padding: 8 } } },
+            }
+        });
+    }
+
+    // ---- Effort by Week ----
+    function renderEffortWeek(data) {
+        destroyChart('effortWeek');
+        var c = chartColors();
+        charts.effortWeek = new Chart(document.getElementById('effortWeekChart'), {
+            type: 'line',
+            data: {
+                labels: data.map(function(d) { return d.week; }),
+                datasets: [{
+                    label: 'Hours',
+                    data: data.map(function(d) { return d.hours; }),
+                    borderColor: c.blue, backgroundColor: c.blue + '20',
+                    fill: true, tension: 0.3, pointRadius: 4,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: true,
+                scales: {
+                    y: { beginAtZero: true, ticks: { color: c.text }, grid: { color: c.grid } },
+                    x: { ticks: { color: c.text }, grid: { display: false } },
+                },
+                plugins: { legend: { display: false } },
+            }
+        });
+    }
+
+    // ---- Effort by Category ----
+    function renderEffortCategory(data) {
+        destroyChart('effortCategory');
+        var c = chartColors();
+        var cats = Object.keys(data);
+        var colors = [c.blue, c.green, c.yellow, c.red, c.purple, c.orange, c.cyan];
+
+        charts.effortCategory = new Chart(document.getElementById('effortCategoryChart'), {
+            type: 'doughnut',
+            data: {
+                labels: cats.map(function(k) { return k.charAt(0).toUpperCase() + k.slice(1); }),
+                datasets: [{
+                    data: cats.map(function(k) { return Math.round(data[k] * 10) / 10; }),
+                    backgroundColor: colors.slice(0, cats.length),
+                    borderWidth: 0,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: true, cutout: '55%',
+                plugins: { legend: { position: 'bottom', labels: { color: c.text, boxWidth: 12, padding: 8 } } },
+            }
+        });
+    }
+
+    // ---- Utilization Table ----
+    function renderUtilization(data) {
+        var tbody = document.querySelector('#utilizationTable tbody');
+        var people = Object.keys(data).sort(function(a, b) { return data[b].hours - data[a].hours; });
+
+        if (!people.length) { tbody.innerHTML = '<tr><td colspan="5" class="text-muted text-center">No time entries</td></tr>'; return; }
+
+        var maxHours = Math.max.apply(null, people.map(function(p) { return data[p].hours; }));
+        tbody.innerHTML = people.map(function(p) {
+            var d = data[p];
+            var utilPct = maxHours > 0 ? Math.round(d.hours / maxHours * 100) : 0;
+            var barColor = utilPct >= 80 ? '#10b981' : utilPct >= 50 ? '#f59e0b' : '#ef4444';
+            return '<tr>' +
+                '<td><strong>' + p + '</strong></td>' +
+                '<td>' + d.hours.toFixed(1) + 'h</td>' +
+                '<td>' + d.billable.toFixed(1) + 'h</td>' +
+                '<td>' + utilPct + '%</td>' +
+                '<td style="min-width:100px;"><div class="progress" style="height:6px;">' +
+                '<div class="progress-bar" style="width:' + utilPct + '%;background:' + barColor + ';"></div>' +
+                '</div></td></tr>';
+        }).join('');
+    }
+
+    // ---- Readiness by Workstream ----
+    function renderReadiness(data) {
+        destroyChart('readiness');
+        var c = chartColors();
+        var ws = Object.keys(data);
+
+        charts.readiness = new Chart(document.getElementById('readinessChart'), {
+            type: 'bar',
+            data: {
+                labels: ws,
+                datasets: [
+                    {
+                        label: 'Ready', data: ws.map(function(k) { return data[k].ready; }),
+                        backgroundColor: c.green + '99', borderColor: c.green, borderWidth: 1, borderRadius: 4,
+                    },
+                    {
+                        label: 'Remaining', data: ws.map(function(k) { return data[k].total - data[k].ready; }),
+                        backgroundColor: '#6b728099', borderColor: '#6b7280', borderWidth: 1, borderRadius: 4,
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: true,
+                scales: {
+                    y: { beginAtZero: true, stacked: true, ticks: { color: c.text, stepSize: 1 }, grid: { color: c.grid } },
+                    x: { stacked: true, ticks: { color: c.text, maxRotation: 45 }, grid: { display: false } },
+                },
+                plugins: { legend: { position: 'bottom', labels: { color: c.text, boxWidth: 12, padding: 8 } } },
+            }
+        });
+    }
+
+})();
+</script>
+{% endblock %}
