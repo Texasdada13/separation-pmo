@@ -20,17 +20,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEMO_PROGRAM_NAME = "[DEMO] Acme Corp Divestiture"
 
 
-def seed():
-    from web.app import create_app
+def seed(use_existing_context=False):
     from src.database.models import (
         db, Program, Workstream, Task, Milestone, TSAAgreement,
         SLAMetric, RAIDItem, TimeEntry, GovernanceMeeting,
         ReadinessItem
     )
 
-    app = create_app()
-
-    with app.app_context():
+    def _do_seed():
         existing = Program.query.filter_by(name=DEMO_PROGRAM_NAME).first()
         if existing:
             print(f"Demo program exists (id={existing.id}). Deleting and re-seeding...")
@@ -406,6 +403,21 @@ def seed():
         print(f"  Program ID: {pid}")
         print(f"  Dashboard:  http://127.0.0.1:5102/dashboard")
         print(f"  Program:    http://127.0.0.1:5102/program/{pid}")
+
+    import scripts.seed_demo as _self
+    _self._seeding = True
+    try:
+        if use_existing_context:
+            # Called from within create_app() — already have an app context
+            _do_seed()
+        else:
+            # Called standalone or from start_dev.py — need our own app context
+            from web.app import create_app
+            app = create_app()
+            with app.app_context():
+                _do_seed()
+    finally:
+        _self._seeding = False
 
 
 if __name__ == "__main__":

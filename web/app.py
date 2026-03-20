@@ -45,6 +45,17 @@ def create_app():
         db.create_all()
         logger.info("Database tables created")
 
+        # Auto-seed demo data if database is empty (works in all environments)
+        if Program.query.count() == 0:
+            try:
+                from scripts import seed_demo
+                if not getattr(seed_demo, '_seeding', False):
+                    logger.info("Empty database detected — loading demo data...")
+                    seed_demo.seed(use_existing_context=True)
+                    logger.info("Demo data loaded successfully")
+            except Exception as e:
+                logger.error(f"Failed to load demo data: {e}")
+
     # Register patriot-ui-kit
     try:
         from patriot_ui import init_ui
